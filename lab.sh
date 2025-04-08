@@ -34,7 +34,7 @@ main () {
   # cleanup done: now it is time to define needed functions
 
   shopt -s expand_aliases
-  not () { if ! ${@}; then return 0; else return 1; fi; }
+  not () { set -f; if ! ${@}; then set +f; return 0; else set +f; return 1; fi; }
   eq () { if [[ "${1}" == "${2}" ]]; then return 0; else return 1; fi; }
   gt () { return "$(( ${1} > ${2} ? 0 : 1 ))"; }
   lt () { return "$(( ${1} < ${2} ? 0 : 1 ))"; }
@@ -84,6 +84,7 @@ main () {
 
   harden curl
   harden id
+  harden jq
   harden mktemp
   harden ssh
   harden tar
@@ -140,36 +141,32 @@ main () {
     esac
   }
 
-  # define a new function for each external tool: allow to standardize external tools for an expensive speed loss
-  containerize () {
-    # cwd: mount to define the current working directory of the tool
-    # match & match2: mounts to define identical absolute path between host and container
-    eval "${1} () {
-      container up \${cwd:+\"--volume\"} \${cwd:+\"\${cwd}:/home/nobody/\"} \
-        \${match:+\"--volume\"} \${match:+\"\${match}:\${match}\"} \
-        \${match2:+\"--volume\"} \${match2:+\"\${match2}:\${match2}\"} \
-        --rm --interactive 'lab/oneshot' ${1} \"\${@}\"
-      unset cwd match match2
-    }"
-  }
-
   image () {
     case "${1}" in
     ( 'build' )
-      tar -c -f "${tmp}/context.tar" "./dockerfiles/${1}"
-      req post "/build?dockerfile=./dockerfiles/${1}/Dockerfile&t=lab/${1}:${version}" --data-binary @- --header 'Content-Type: application/x-tar' --no-buffer < "${tmp}/context.tar"
+      tar -c -f "${tmp}/context.tar" "./dockerfiles/${2}"
+      req post "/build?dockerfile=./dockerfiles/${2}/Dockerfile&t=lab/${2}:${version}" --data-binary @- --header 'Content-Type: application/x-tar' --no-buffer < "${tmp}/context.tar"
       rm -rf "${tmp}" ;;
-    ( 'pull' ) printf 'TODO\n' ;;
-    ( 'tag' ) printf 'TODO\n' ;;
+    ( 'pull' ) req post "/images/create?fromImage=${2}/${3}/${4}:${5}" --no-buffer | jq -r '.status + (if .progress | length > 0 then " " else "" end) + .progress' ;;
+    ( 'tag' ) req post "/images/${2}:${3}/tag?repo=${4}&tag=${5}" ;;
     ( 'remove' ) : ;;
-    ( 'tagged' ) : ;;
+    ( 'tagged' ) req get '/images/json' -G --data-urlencode "filters={\"reference\":{\"${2}:${3}\":true}}" 'http://v1.48/images/json' | jq -e '. | length > 0' > /dev/null ;;
     ( * ) return 1 ;;
     esac
   }
 
-  image pull "alpine:3.21"
-  image tag "alpine:3.21" "local.alpine:${version}"
-  image build oneshot
+  local alpine_version
+  alpine_version='3.21'
+  readonly alpine_version
+
+  if not image tagged 'alpine' "${alpine_version}"
+  then
+    image pull 'docker.io' 'library' 'alpine' "${alpine_version}"
+  fi
+  if not image tagged 'local.alpine' "${version}"
+  then
+    image tag 'alpine' "${alpine_version}" 'local.alpine' "${version}"
+  fi
 }
 
 main "${@}"
