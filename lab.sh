@@ -82,10 +82,12 @@ main () {
     fi
   }
 
+  harden base64
   harden curl
   harden id
   harden jq
   harden mktemp
+  harden protoc
   harden ssh
   harden tar
 
@@ -143,10 +145,7 @@ main () {
 
   image () {
     case "${1}" in
-    ( 'build' )
-      tar -c -f "${tmp}/context.tar" "./dockerfiles/${2}"
-      req post "/build?dockerfile=./dockerfiles/${2}/Dockerfile&t=lab/${2}:${version}" --data-binary @- --header 'Content-Type: application/x-tar' --no-buffer < "${tmp}/context.tar"
-      rm -rf "${tmp}" ;;
+    ( 'build' ) tar -c -f - "./dockerfiles/${2}" | req post "/build?dockerfile=./dockerfiles/${2}/Dockerfile&version=2&t=lab/${2}:${version}" --data-binary @- --header 'Content-Type: application/x-tar' --no-buffer | jq -r '. | if .id == "moby.buildkit.trace" then .aux else empty end' | base64 -d | protoc --decode=moby.buildkit.v1.StatusResponse -I ./codegen codegen/api/services/control/control.proto ;;
     ( 'pull' ) req post "/images/create?fromImage=${2}/${3}/${4}:${5}" --no-buffer | jq -r '.status + (if .progress | length > 0 then " " else "" end) + .progress' ;;
     ( 'tag' ) req post "/images/${2}:${3}/tag?repo=${4}&tag=${5}" ;;
     ( 'remove' ) : ;;
@@ -167,6 +166,8 @@ main () {
   then
     image tag 'alpine' "${alpine_version}" 'local.alpine' "${version}"
   fi
+
+  image build 'test'
 }
 
 main "${@}"
