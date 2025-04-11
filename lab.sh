@@ -192,14 +192,14 @@ main () {
     case "${1}" in
     ( 'build' )
       tar -c -f - "./dockerfiles/${2}" \
-        | req post "/build?dockerfile=./dockerfiles/${2}/Dockerfile&verbose=1&version=2&t=lab/${2}:${version}" --data-binary @- --header 'Content-Type: application/x-tar' --no-buffer \
+        | req post "/build?dockerfile=./dockerfiles/${2}/Dockerfile&version=2&t=lab/${2}:${version}" --data-binary @- --header 'Content-Type: application/x-tar' --no-buffer \
         | jq -r '. | if .id == "moby.buildkit.trace" then .aux else empty end' \
         | decode_buildkit_protobuf \
         | protobuf2json \
-        | jq -r '.[] | .vertexes, .statuses | if has("started") and has("completed") then ("[image build '"${2}"'] " + (. | if has("name") then .name else .ID end)) else empty end' ;;
+        | jq -r '.[] | .vertexes, .statuses | if has("started") and has("completed") then ("[image build lab.'"${2}"'] " + (. | if has("name") then .name else .ID end)) else empty end' ;;
     ( 'pull' )
       req post "/images/create?fromImage=${2}/${3}/${4}:${5}" --no-buffer \
-        | jq -r '"[image pull '"${2}/${3}/${4}:${5}"'] "+ .status + (if .progress | length > 0 then " " else "" end) + .progress' ;;
+        | jq -r 'include "jq/module-color"; colored("[image pull '"${2}/${3}/${4}:${5}"'] ";75) + .status + (if .progress | length > 0 then " " else "" end) + .progress' ;;
     ( 'tag' ) req post "/images/${2}:${3}/tag?repo=${4}&tag=${5}" ;;
     ( 'remove' ) : ;;
     ( 'tagged' )
