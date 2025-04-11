@@ -88,6 +88,7 @@ main () {
   harden jq
   harden mktemp
   harden protoc
+  harden sed
   harden ssh
   harden tar
 
@@ -112,6 +113,50 @@ main () {
     ( 'del' ) curl -s --unix-socket "${socket_path}" -X DELETE "${@}" "${endpoint}" ;;
     ( * ) return 1 ;;
     esac
+  }
+
+  # image build utily
+  decode_buildkit_protobuf () {
+    base64 -d \
+      | protoc --decode=moby.buildkit.v1.StatusResponse -I ./resources resources/api/services/control/control.proto
+  }
+
+  # image build utily
+  protobuf2json () {
+    sed '# Add double quotes for PROTOBUF message fields -> JSON keys
+         s/^\(\s*\)\([^:]*\):/\1"\2":/
+
+         # Add double quotes for PROTOBUF message types -> JSON keys
+         s/^\(\s*\)\(\S*\) {/\1"\2": {/
+
+         # Add opened and closed braces for each message type -> JSON object
+         s/^"/{"/
+         s/^}$/}}/
+
+         # Append every input line to the SED hold space
+         H
+
+         # The first line overwrites the SED hold space
+         1h
+
+         # Delete every line not the last from output
+         $!d
+
+         # Switch the contents of the SED hold space and the SED pattern space
+         x
+
+         # Remove new line char when just after { char
+         s/{\n\s*/{/g
+
+         # Remove new line char when just before } char
+         s/\n\s*}/}/g
+
+         # Replace all other new line chars with commas
+         s/\n\s*/,/g
+
+         # Add opened and closed brackets as first and last characters of the final output => JSON array
+         s/^/[/
+         s/$/]/'
   }
 
   container () {
@@ -145,11 +190,21 @@ main () {
 
   image () {
     case "${1}" in
-    ( 'build' ) tar -c -f - "./dockerfiles/${2}" | req post "/build?dockerfile=./dockerfiles/${2}/Dockerfile&version=2&t=lab/${2}:${version}" --data-binary @- --header 'Content-Type: application/x-tar' --no-buffer | jq -r '. | if .id == "moby.buildkit.trace" then .aux else empty end' | base64 -d | protoc --decode=moby.buildkit.v1.StatusResponse -I ./codegen codegen/api/services/control/control.proto ;;
-    ( 'pull' ) req post "/images/create?fromImage=${2}/${3}/${4}:${5}" --no-buffer | jq -r '.status + (if .progress | length > 0 then " " else "" end) + .progress' ;;
+    ( 'build' )
+      tar -c -f - "./dockerfiles/${2}" \
+        | req post "/build?dockerfile=./dockerfiles/${2}/Dockerfile&verbose=1&version=2&t=lab/${2}:${version}" --data-binary @- --header 'Content-Type: application/x-tar' --no-buffer \
+        | jq -r '. | if .id == "moby.buildkit.trace" then .aux else empty end' \
+        | decode_buildkit_protobuf \
+        | protobuf2json \
+        | jq -r '.[] | .vertexes, .statuses | if has("started") and has("completed") then ("[image build '"${2}"'] " + (. | if has("name") then .name else .ID end)) else empty end' ;;
+    ( 'pull' )
+      req post "/images/create?fromImage=${2}/${3}/${4}:${5}" --no-buffer \
+        | jq -r '"[image pull '"${2}/${3}/${4}:${5}"'] "+ .status + (if .progress | length > 0 then " " else "" end) + .progress' ;;
     ( 'tag' ) req post "/images/${2}:${3}/tag?repo=${4}&tag=${5}" ;;
     ( 'remove' ) : ;;
-    ( 'tagged' ) req get '/images/json' -G --data-urlencode "filters={\"reference\":{\"${2}:${3}\":true}}" 'http://v1.48/images/json' | jq -e '. | length > 0' > /dev/null ;;
+    ( 'tagged' )
+      req get '/images/json' -G --data-urlencode "filters={\"reference\":{\"${2}:${3}\":true}}" 'http://v1.48/images/json' \
+        | jq -e '. | length > 0' > /dev/null ;;
     ( * ) return 1 ;;
     esac
   }
