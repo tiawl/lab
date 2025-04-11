@@ -93,26 +93,23 @@ main () {
   harden ssh
   harden tar
 
-  req_id='1'
-  rainbow=""
+  req_id='0'
+  rainbow="$(printf '%s\n' '21' '27' '33' '39' '45' '51' '50' '49' '48' '47' '46' '82' '118' '154' '190' '226' '220' '214' '208' '202' '196' '197' '198' '199' '200' '201' '165' '129' '93' '57' | shuf)"
   tmp="$(mktemp --directory '/tmp/tmp.XXXXXXXX')"
   uid="$(id -u)"
   version='0.1.0'
   readonly tmp uid version
 
   color () {
-    if str empty "${rainbow:-}"
-    then
-      rainbow="$(printf '%s\n' '21' '27' '33' '39' '45' '51' '50' '49' '48' '47' '46' '82' '118' '154' '190' '226' '220' '214' '208' '202' '196' '197' '198' '199' '200' '201' '165' '129' '93' '57' | shuf)"
-    fi
-
-    printf '%s\n' "${rainbow%%$'\n'*}"
-    rainbow="${rainbow#*$'\n'}"
+    set -- ${rainbow}
+    local n
+    n="$(( (req_id % 30) + 1 ))"
+    readonly n
+    printf '%s\n' "${!n}"
   }
 
   req () {
     str starts "${2}" '/'
-    req_id="$(( req_id + 1 ))"
 
     local socket_path method endpoint
     socket_path='/var/run/docker.sock'
@@ -120,6 +117,8 @@ main () {
     endpoint="http://v1.48${2}"
     readonly socket_path method endpoint
     shift 2
+
+    jq -n -r 'include "jq/module-color"; colored("'"${req_id}"'"; '"$(color)"') + " '"${method^^}"' '"${endpoint}"'"' >&2
 
     case "${method}" in
     ( 'get' ) curl -s --unix-socket "${socket_path}" -X GET "${@}" "${endpoint}" ;;
@@ -174,6 +173,7 @@ main () {
   }
 
   container () {
+    req_id="$(( req_id + 1 ))"
     case "${1}" in
     ( 'create' ) printf 'TODO\n' ;;
     ( 'start' ) printf 'TODO\n' ;;
@@ -187,6 +187,7 @@ main () {
   }
 
   network () {
+    req_id="$(( req_id + 1 ))"
     case "${1}" in
     ( 'create' ) : ;;
     ( 'remove' ) : ;;
@@ -195,6 +196,7 @@ main () {
   }
 
   volume () {
+    req_id="$(( req_id + 1 ))"
     case "${1}" in
     ( 'create' ) : ;;
     ( 'remove' ) : ;;
@@ -203,6 +205,7 @@ main () {
   }
 
   image () {
+    req_id="$(( req_id + 1 ))"
     case "${1}" in
     ( 'build' )
       tar -c -f - "./dockerfiles/${2}" \
@@ -210,10 +213,10 @@ main () {
         | jq -r '. | if .id == "moby.buildkit.trace" then .aux else empty end' \
         | decode_buildkit_protobuf \
         | protobuf2json \
-        | jq -r 'include "jq/module-color"; .[] | .vertexes, .statuses | if has("started") and has("completed") then (colored("'"${req_id}"'"; '"$(color)"') + " > image build lab.'"${2}"' > " + (. | if has("name") then .name else .ID end)) else empty end' ;;
+        | jq -r 'include "jq/module-color"; .[] | .vertexes, .statuses | if has("started") and has("completed") then (colored("'"${req_id}"'"; '"$(color)"') + " > image build lab.'"${2}"' > " + (. | if has("name") then .name else .ID end)) else empty end' >&2 ;;
     ( 'pull' )
       req post "/images/create?fromImage=${2}/${3}/${4}:${5}" --no-buffer \
-        | jq -r 'include "jq/module-color"; colored("'"${req_id}"'"; '"$(color)"') + " > image pull '"${2}/${3}/${4}:${5}"' > " + .status + (if .progress | length > 0 then " " else "" end) + .progress' ;;
+        | jq -r 'include "jq/module-color"; colored("'"${req_id}"'"; '"$(color)"') + " > image pull '"${2}/${3}/${4}:${5}"' > " + .status + (if .progress | length > 0 then " " else "" end) + .progress'  >&2 ;;
     ( 'tag' ) req post "/images/${2}:${3}/tag?repo=${4}&tag=${5}" ;;
     ( 'remove' ) : ;;
     ( 'tagged' )
