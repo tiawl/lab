@@ -139,23 +139,28 @@ main () {
   req () {
     str starts "${2}" '/'
 
-    local socket_path api_version method endpoint decoded_endpoint
+    local socket_path api_version method endpoint encoded_endpoint key
     socket_path='/var/run/docker.sock'
     api_version='v1.48'
     method="${1}"
-    endpoint="http://${api_version}${2}$(for key in ${!encode_me[@]}; do printf '%s=%s' "${key}" "$(encode "${encode_me["${key}"]}")"; done)"
-    decoded_endpoint="http://${api_version}${2}$(for key in ${!encode_me[@]}; do printf '%s=%s' "${key}" "${encode_me["${key}"]}"; done)"
-    decoded_endpoint="${decoded_endpoint//\"/\\\"}"
-    readonly socket_path api_version method endpoint decoded_endpoint
+    encoded_endpoint="http://${api_version}${2}"
+    endpoint="${encoded_endpoint}"
+    for key in ${!encode_me[@]}
+    do
+      encoded_endpoint="${encoded_endpoint}${key}=$(encode "${encode_me["${key}"]}")"
+      endpoint="${endpoint}${key}=${encode_me["${key}"]}"
+    done
+    endpoint="${endpoint//\"/\\\"}"
+    readonly socket_path api_version method encoded_endpoint endpoint
     shift 2
     declare -A encode_me
 
-    jq -n -r 'include "jq/module-color"; colored("'"${req_id}"'"; '"$(color)"') + " '"${method^^}"' '"${decoded_endpoint}"'"' >&2
+    jq -n -r 'include "jq/module-color"; colored("'"${req_id}"'"; '"$(color)"') + " '"${method^^}"' '"${endpoint}"'"' >&2
 
     case "${method}" in
-    ( 'get' ) curl -s --unix-socket "${socket_path}" -X GET "${@}" "${endpoint}" ;;
-    ( 'post' ) curl -s --unix-socket "${socket_path}" -X POST "${@}" "${endpoint}" ;;
-    ( 'del' ) curl -s --unix-socket "${socket_path}" -X DELETE "${@}" "${endpoint}" ;;
+    ( 'get' ) curl -s --unix-socket "${socket_path}" -X GET "${@}" "${encoded_endpoint}" ;;
+    ( 'post' ) curl -s --unix-socket "${socket_path}" -X POST "${@}" "${encoded_endpoint}" ;;
+    ( 'del' ) curl -s --unix-socket "${socket_path}" -X DELETE "${@}" "${encoded_endpoint}" ;;
     ( * ) return 1 ;;
     esac
   }
