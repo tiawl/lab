@@ -100,6 +100,24 @@ main () {
   version='0.1.0'
   readonly tmp uid version
 
+  declare -A encoded sep loc project encode_me
+  sep['image']='/'
+  sep['tag']=':'
+  sep['container']='.'
+  loc['image']="local${sep['image']}"
+  project['container']="lab${sep['container']}"
+  project['image']="lab${sep['image']}"
+
+  encoded['{']='%7B'
+  encoded['}']='%7D'
+  encoded[':']='%3A'
+  encoded['"']='%22'
+  encoded['/']='%2F'
+  encoded['?']='%3F'
+  encoded['&']='%26'
+  encoded['=']='%3D'
+  encoded['.']='%2E'
+
   color () {
     set -- ${rainbow}
     local n
@@ -108,17 +126,31 @@ main () {
     printf '%s\n' "${!n}"
   }
 
+  encode () {
+    local str char
+    str="${1}"
+    for char in ${!encoded[@]}
+    do
+      str="${str//"${char}"/"${encoded["${char}"]}"}"
+    done
+    printf '%s\n' "${str}"
+  }
+
   req () {
     str starts "${2}" '/'
 
-    local socket_path method endpoint
+    local socket_path api_version method endpoint decoded_endpoint
     socket_path='/var/run/docker.sock'
+    api_version='v1.48'
     method="${1}"
-    endpoint="http://v1.48${2}"
-    readonly socket_path method endpoint
+    endpoint="http://${api_version}${2}$(for key in ${!encode_me[@]}; do printf '%s=%s' "${key}" "$(encode "${encode_me["${key}"]}")"; done)"
+    decoded_endpoint="http://${api_version}${2}$(for key in ${!encode_me[@]}; do printf '%s=%s' "${key}" "${encode_me["${key}"]}"; done)"
+    decoded_endpoint="${decoded_endpoint//\"/\\\"}"
+    readonly socket_path api_version method endpoint decoded_endpoint
     shift 2
+    declare -A encode_me
 
-    jq -n -r 'include "jq/module-color"; colored("'"${req_id}"'"; '"$(color)"') + " '"${method^^}"' '"${endpoint}"'"' >&2
+    jq -n -r 'include "jq/module-color"; colored("'"${req_id}"'"; '"$(color)"') + " '"${method^^}"' '"${decoded_endpoint}"'"' >&2
 
     case "${method}" in
     ( 'get' ) curl -s --unix-socket "${socket_path}" -X GET "${@}" "${endpoint}" ;;
@@ -128,59 +160,21 @@ main () {
     esac
   }
 
-  # image build utily
-  decode_buildkit_protobuf () {
-    base64 -d \
-      | protoc --decode=moby.buildkit.v1.StatusResponse -I ./resources resources/api/services/control/control.proto
-  }
-
-  # image build utily
-  protobuf2json () {
-    sed '# Add double quotes for PROTOBUF message fields -> JSON keys
-         s/^\(\s*\)\([^:]*\):/\1"\2":/
-
-         # Add double quotes for PROTOBUF message types -> JSON keys
-         s/^\(\s*\)\(\S*\) {/\1"\2": {/
-
-         # Add opened and closed braces for each message type -> JSON object
-         s/^"/{"/
-         s/^}$/}}/
-
-         # Append every input line to the SED hold space
-         H
-
-         # The first line overwrites the SED hold space
-         1h
-
-         # Delete every line not the last from output
-         $!d
-
-         # Switch the contents of the SED hold space and the SED pattern space
-         x
-
-         # Remove new line char when just after { char
-         s/{\n\s*/{/g
-
-         # Remove new line char when just before } char
-         s/\n\s*}/}/g
-
-         # Replace all other new line chars with commas
-         s/\n\s*/,/g
-
-         # Add opened and closed brackets as first and last characters of the final output => JSON array
-         s/^/[/
-         s/$/]/'
+  container_create () {
+    shift
+      req_id="$(( req_id + 1 ))"
+      req post "/containers/create?name=${project['container']}${1}&Hostname=${1}&Image=${project['image']}${1}${sep['tag']}${version}"
   }
 
   container () {
-    req_id="$(( req_id + 1 ))"
     case "${1}" in
-    ( 'create' ) printf 'TODO\n' ;;
+    ( 'create' ) container_create "${@}" ;;
     ( 'start' ) printf 'TODO\n' ;;
     ( 'stop' ) : ;;
     ( 'remove' ) : ;;
     ( 'up' ) printf 'TODO\n' ;;
     ( 'down' ) : ;;
+    ( 'created' ) : ;;
     ( 'running' ) : ;;
     ( * ) return 1 ;;
     esac
@@ -204,24 +198,145 @@ main () {
     esac
   }
 
-  image () {
+  image_build () {
+    decode_buildkit_protobuf () {
+      base64 -d \
+        | protoc --decode=moby.buildkit.v1.StatusResponse -I ./resources resources/api/services/control/control.proto
+    }
+
+    protobuf2json () {
+      sed '# Add `]` before each `}`
+           s/^\(\s*\)}$/\1]}/g
+
+           # Add `"` around PROTOBUF message fields and braces around key-value pair => JSON object
+           s/^\(\s*\)\([^:]*\): \(.*\)/\1{"\2": \3}/
+
+           # Add `"` around PROTOBUF message types, `{` before and replace trailing `{` with `[`
+           s/^\(\s*\)\(\S\+\) {/\1{"\2": [/
+
+           # Add `\` before `\[0-9]` to avoid jq parse error
+           s/\\\([0-9]\)/\\\\\1/g
+
+           # Append every input line to the SED hold space
+           H
+
+           # The first line overwrites the SED hold space
+           1h
+
+           # Delete every line not the last from output
+           $!d
+
+           # Switch the contents of the SED hold space and the SED pattern space
+           x
+
+           # Remove `\n` when just after `[`
+           s/\[\n\s*/[/g
+
+           # Remove `\n` between `}` and `]`
+           s/}\n\s*]/}]/g
+
+           # Replace `\n` between `}` and `{` with `,`
+           s/}\n\s*{/}, {/g
+
+           # Add `{` and `}` as first and last characters into the final output => JSON array
+           s/^/[/
+           s/$/]/'
+    }
+
+    json2log () {
+      local dir
+      dir="${1}"
+      readonly dir
+
+      jq -r 'include "jq/module-color"; .[] |
+        if has("vertexes")
+        then
+          (.vertexes |
+            if any(.[]; has("started")) and any(.[]; has("completed"))
+            then
+              (.[] | select(has("name")) | colored("'"${req_id}"'"; '"$(color)"') + " > image build '"${project['image']}${dir}"' > " + .name)
+            else
+              empty
+            end)
+        elif has("statuses")
+        then
+          (.statuses |
+            if any(.[]; has("started")) and any(.[]; has("completed"))
+            then
+              (.[] | select(has("ID")) | colored("'"${req_id}"'"; '"$(color)"') + " > image build '"${project['image']}${dir}"' > " + .ID)
+            else
+              empty
+            end)
+        elif has("warnings")
+        then
+          (.warnings[] | select(has("short")) | colored("'"${req_id}"'"; '"$(color)"') + " > image build '"${project['image']}${dir}"' > [WARNING] " + .short)
+        else
+          empty
+        end'
+    }
+
+    shift
+    local dir img
+    dir="${1}"
+    img="${dir}:${version}"
+    declare -A encode_me
+    encode_me['buildargs']="{\"FROM\":\"${2}\"}"
+    readonly dir img
+
     req_id="$(( req_id + 1 ))"
+    tar -c -f - "./dockerfiles/${dir}" \
+      | req post "/build?dockerfile=./dockerfiles/${dir}/Dockerfile&version=2&t=${project['image']}${img}&" --data-binary @- --header 'Content-Type: application/x-tar' --no-buffer \
+      | jq -r '. | if .id == "moby.buildkit.trace" then .aux else empty end' \
+      | decode_buildkit_protobuf \
+      | protobuf2json \
+      | json2log "${dir}" >&2
+  }
+
+  image_pull () {
+    shift
+    if not image tagged "${3}" "${4}"
+    then
+      local img
+      img="${1}/${2}/${3}:${4}"
+      readonly img
+      req_id="$(( req_id + 1 ))"
+      req post "/images/create?fromImage=${img}" --no-buffer \
+        | jq -r 'include "jq/module-color"; colored("'"${req_id}"'"; '"$(color)"') + " > image pull '"${img}"' > " + .status + (if .progress | length > 0 then " " else "" end) + .progress' >&2
+    fi
+  }
+
+  image_tag () {
+    shift
+    local new_repo old_tag
+    new_repo="${loc['image']}${1}"
+    old_tag="${1}:${2}"
+    readonly new_repo old_tag
+    if not image tagged "${new_repo}" "${version}"
+    then
+      req_id="$(( req_id + 1 ))"
+      req post "/images/${old_tag}/tag?repo=${new_repo}&tag=${version}"
+    fi
+  }
+
+  image_tagged () {
+    shift
+    local tag
+    tag="${1}:${2}"
+    readonly tag
+    declare -A encode_me
+    encode_me['filters']="{\"reference\":{\"${tag}\":true}}"
+    req_id="$(( req_id + 1 ))"
+    req get '/images/json?' \
+      | jq -e '. | length > 0' > /dev/null
+  }
+
+  image () {
     case "${1}" in
-    ( 'build' )
-      tar -c -f - "./dockerfiles/${2}" \
-        | req post "/build?dockerfile=./dockerfiles/${2}/Dockerfile&version=2&t=lab/${2}:${version}" --data-binary @- --header 'Content-Type: application/x-tar' --no-buffer \
-        | jq -r '. | if .id == "moby.buildkit.trace" then .aux else empty end' \
-        | decode_buildkit_protobuf \
-        | protobuf2json \
-        | jq -r 'include "jq/module-color"; .[] | .vertexes, .statuses | if has("started") and has("completed") then (colored("'"${req_id}"'"; '"$(color)"') + " > image build lab.'"${2}"' > " + (. | if has("name") then .name else .ID end)) else empty end' >&2 ;;
-    ( 'pull' )
-      req post "/images/create?fromImage=${2}/${3}/${4}:${5}" --no-buffer \
-        | jq -r 'include "jq/module-color"; colored("'"${req_id}"'"; '"$(color)"') + " > image pull '"${2}/${3}/${4}:${5}"' > " + .status + (if .progress | length > 0 then " " else "" end) + .progress'  >&2 ;;
-    ( 'tag' ) req post "/images/${2}:${3}/tag?repo=${4}&tag=${5}" ;;
+    ( 'build' ) image_build "${@}" ;;
+    ( 'pull' ) image_pull "${@}" ;;
+    ( 'tag' ) image_tag "${@}" ;;
     ( 'remove' ) : ;;
-    ( 'tagged' )
-      req get '/images/json' -G --data-urlencode "filters={\"reference\":{\"${2}:${3}\":true}}" 'http://v1.48/images/json' \
-        | jq -e '. | length > 0' > /dev/null ;;
+    ( 'tagged' ) image_tagged "${@}" ;;
     ( * ) return 1 ;;
     esac
   }
@@ -230,33 +345,11 @@ main () {
   alpine_version='3.21'
   readonly alpine_version
 
-  if not image tagged 'alpine' "${alpine_version}"
-  then
-    image pull 'docker.io' 'library' 'alpine' "${alpine_version}"
-  fi
-  if not image tagged 'local.alpine' "${version}"
-  then
-    image tag 'alpine' "${alpine_version}" 'local.alpine' "${version}"
-  fi
+  image pull 'docker.io' 'library' 'alpine' "${alpine_version}"
+  image tag 'alpine' "${alpine_version}"
 
-  image build 'test'
+  image build 'bounce' "${loc['image']}alpine${sep['tag']}${version}"
+  container create 'bounce'
 }
 
 main "${@}"
-
-# ----------------------------------------------------------------------------
-# MEMO: tests with curl
-# ----------------------------------------------------------------------------
-#
-# regular:
-# curl -s --unix-socket /var/run/docker.sock -X DELETE http://v1.45/containers/hardcore_jang?force=true
-#
-# filters/urlencode:
-# curl -s --unix-socket /var/run/docker.sock 'http://1.45/images/json' -X GET -G --data-urlencode 'filters={"reference":{"172.17.2.3:5000/mywhalefleet/tiawl.local.*":true}}'
-#
-# attach:
-# curl -s -N -T - -X POST --unix-socket ./docker.sock 'http://1.45/containers/aaebdff75c380b80556b9c2ce65b2c62ba4cdd59427d3f269d5a61d7b8a087b0/attach?stdout=1&stdin=1&stderr=1&stream=1' -H 'Upgrade: tcp' -H 'Connection: Upgrade'
-#
-# build:
-# tar c -f context.tar -C /tmp .
-# curl -s --unix-socket /var/run/docker.sock -X POST --data-binary @- --header 'Content-Type: application/x-tar' --no-buffer http://v1.45/build?dockerfile=Dockerfile&t=reg/proj/my-img:my-tag < context.tar
