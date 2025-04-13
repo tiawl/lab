@@ -53,7 +53,7 @@ main () (
       coreutils \
       git \
       bc \
-      curl jq openssh-client protobuf-compiler sed tar ;;
+      bash curl jq openssh-client protobuf-compiler sed tar ;;
   ( * )
     printf 'Unknown OS: %s\n' "${dist}" >&2
     return 1 ;;

@@ -58,6 +58,7 @@ main () {
   readonly uid version
 
   declare -A sep loc project encode_me
+  declare -a json2queryparam
   sep['image']='/'
   sep['tag']=':'
   sep['container']='.'

@@ -28,19 +28,29 @@ req () {
   socket_path='/var/run/docker.sock'
   api_version='v1.48'
   method="${1}"
-  encoded_endpoint="http://${api_version}${2}"
-  endpoint="${encoded_endpoint}"
   for key in ${!encode_me[@]}
   do
-    encoded_endpoint="${encoded_endpoint}${key}=$(encode "${encode_me["${key}"]}")"
-    endpoint="${endpoint}${key}=${encode_me["${key}"]}"
+    encoded_endpoint="${encoded_endpoint:-}${encoded_endpoint:+&}${key}=$(encode "${encode_me["${key}"]}")"
+    endpoint="${endpoint:-}${endpoint:+&}${key}=${encode_me["${key}"]}"
   done
-  endpoint="${endpoint//\"/\\\"}"
-  readonly socket_path api_version method encoded_endpoint endpoint
+  for key in ${!json2queryparam[@]}
+  do
+    endpoint="${endpoint:-}$(jq -r -n '"&" + (['"${json2queryparam["${key}"]}"' | to_entries[] | .key + "=" + .value] | join("&"))')"
+    if not eq "${@: -1}" 'Content-Type: application/json'
+    then
+      set -- "${@}" '-H' 'Content-Type: application/json'
+    fi
+    set -- "${@}" '--data' "${json2queryparam["${key}"]}"
+  done
+  encoded_endpoint="http://${api_version}${2}${encoded_endpoint:-}"
+  endpoint="http://${api_version}${2}${endpoint:-}"
+  readonly socket_path api_version method endpoint encoded_endpoint
+
   shift 2
   declare -A encode_me
+  declare -a json2queryparam
 
-  jq -n -r 'include "jq/module-color"; colored("'"${req_id}"'"; '"$(color)"') + " '"${method^^}"' '"${endpoint}"'"' >&2
+  jq -n -r 'include "jq/module-color"; colored("'"${req_id}"'"; '"$(color)"') + " '"${method^^}"' '"${endpoint//\"/\\\"}"'"' >&2
 
   case "${method}" in
   ( 'get' ) curl -s --unix-socket "${socket_path}" -X GET "${@}" "${encoded_endpoint}" ;;

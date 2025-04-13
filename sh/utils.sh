@@ -20,6 +20,7 @@ is () {
   ( 'present' ) if [ -e "${2}" ]; then return 0; else return 1; fi ;;
   ( 'file' ) if [ -f "${2}" ]; then return 0; else return 1; fi ;;
   ( 'cmd') if is present "$(command -v "${2}" 2> /dev/null || :)"; then return 0; else return 1; fi ;;
+  ( 'array' ) if [[ "$(declare -p "${2}")" =~ 'declare -a' ]]; then return 0; else return 1; fi ;;
   esac
 }
 
