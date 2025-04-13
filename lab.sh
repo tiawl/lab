@@ -3,14 +3,16 @@
 main () {
   # shell scripting: always consider the worst env
   # part 1: unalias everything
-  \command set -Ceu
+  \command set -C -e -u -o pipefail
   \command unalias -a
   \command unset -f command
   command unset -f unset
   unset -f set
-  unset -f readonly
   unset -f local
   unset -f readonly
+  unset -f shopt
+
+  shopt -s lastpipe
 
   old_ifs="${IFS}"
   readonly old_ifs
@@ -33,8 +35,7 @@ main () {
 
   # cleanup done: now it is time to define needed functions
 
-  shopt -s expand_aliases
-  not () { set -f; if ! ${@}; then set +f; return 0; else set +f; return 1; fi; }
+  not () { if ! "${@}"; then return 0; else return 1; fi; }
   eq () { if [[ "${1}" == "${2}" ]]; then return 0; else return 1; fi; }
   gt () { return "$(( ${1} > ${2} ? 0 : 1 ))"; }
   lt () { return "$(( ${1} < ${2} ? 0 : 1 ))"; }
@@ -83,10 +84,12 @@ main () {
   }
 
   harden base64
+  #harden bc
   harden curl
+  harden env
   harden id
   harden jq
-  harden mktemp
+  #harden mktemp
   harden protoc
   harden sed
   harden shuf
@@ -95,28 +98,17 @@ main () {
 
   req_id='0'
   rainbow="$(printf '%s\n' '21' '27' '33' '39' '45' '51' '50' '49' '48' '47' '46' '82' '118' '154' '190' '226' '220' '214' '208' '202' '196' '197' '198' '199' '200' '201' '165' '129' '93' '57' | shuf)"
-  tmp="$(mktemp --directory '/tmp/tmp.XXXXXXXX')"
   uid="$(id -u)"
   version='0.1.0'
-  readonly tmp uid version
+  readonly uid version
 
-  declare -A encoded sep loc project encode_me
+  declare -A sep loc project encode_me
   sep['image']='/'
   sep['tag']=':'
   sep['container']='.'
   loc['image']="local${sep['image']}"
   project['container']="lab${sep['container']}"
   project['image']="lab${sep['image']}"
-
-  encoded['{']='%7B'
-  encoded['}']='%7D'
-  encoded[':']='%3A'
-  encoded['"']='%22'
-  encoded['/']='%2F'
-  encoded['?']='%3F'
-  encoded['&']='%26'
-  encoded['=']='%3D'
-  encoded['.']='%2E'
 
   color () {
     set -- ${rainbow}
@@ -127,6 +119,17 @@ main () {
   }
 
   encode () {
+    declare -A encoded
+    encoded['{']='%7B'
+    encoded['}']='%7D'
+    encoded[':']='%3A'
+    encoded['"']='%22'
+    encoded['/']='%2F'
+    encoded['?']='%3F'
+    encoded['&']='%26'
+    encoded['=']='%3D'
+    encoded['.']='%2E'
+
     local str char
     str="${1}"
     for char in ${!encoded[@]}
@@ -206,78 +209,7 @@ main () {
   image_build () {
     decode_buildkit_protobuf () {
       base64 -d \
-        | protoc --decode=moby.buildkit.v1.StatusResponse -I ./resources resources/api/services/control/control.proto
-    }
-
-    protobuf2json () {
-      sed '# Add `]` before each `}`
-           s/^\(\s*\)}$/\1]}/g
-
-           # Add `"` around PROTOBUF message fields and braces around key-value pair => JSON object
-           s/^\(\s*\)\([^:]*\): \(.*\)/\1{"\2": \3}/
-
-           # Add `"` around PROTOBUF message types, `{` before and replace trailing `{` with `[`
-           s/^\(\s*\)\(\S\+\) {/\1{"\2": [/
-
-           # Add `\` before `\[0-9]` to avoid jq parse error
-           s/\\\([0-9]\)/\\\\\1/g
-
-           # Append every input line to the SED hold space
-           H
-
-           # The first line overwrites the SED hold space
-           1h
-
-           # Delete every line not the last from output
-           $!d
-
-           # Switch the contents of the SED hold space and the SED pattern space
-           x
-
-           # Remove `\n` when just after `[`
-           s/\[\n\s*/[/g
-
-           # Remove `\n` between `}` and `]`
-           s/}\n\s*]/}]/g
-
-           # Replace `\n` between `}` and `{` with `,`
-           s/}\n\s*{/}, {/g
-
-           # Add `{` and `}` as first and last characters into the final output => JSON array
-           s/^/[/
-           s/$/]/'
-    }
-
-    json2log () {
-      local dir
-      dir="${1}"
-      readonly dir
-
-      jq -r 'include "jq/module-color"; .[] |
-        if has("vertexes")
-        then
-          (.vertexes |
-            if any(.[]; has("started")) and any(.[]; has("completed"))
-            then
-              (.[] | select(has("name")) | colored("'"${req_id}"'"; '"$(color)"') + " > image build '"${project['image']}${dir}"' > " + .name)
-            else
-              empty
-            end)
-        elif has("statuses")
-        then
-          (.statuses |
-            if any(.[]; has("started")) and any(.[]; has("completed"))
-            then
-              (.[] | select(has("ID")) | colored("'"${req_id}"'"; '"$(color)"') + " > image build '"${project['image']}${dir}"' > " + .ID)
-            else
-              empty
-            end)
-        elif has("warnings")
-        then
-          (.warnings[] | select(has("short")) | colored("'"${req_id}"'"; '"$(color)"') + " > image build '"${project['image']}${dir}"' > [WARNING] " + .short)
-        else
-          empty
-        end'
+        | protoc --decode=moby.buildkit.v1.StatusResponse -I ./protobuf protobuf/api/services/control/control.proto
     }
 
     shift
@@ -293,8 +225,8 @@ main () {
       | req post "/build?dockerfile=./dockerfiles/${dir}/Dockerfile&version=2&t=${project['image']}${img}&" --data-binary @- --header 'Content-Type: application/x-tar' --no-buffer \
       | jq -r '. | if .id == "moby.buildkit.trace" then .aux else empty end' \
       | decode_buildkit_protobuf \
-      | protobuf2json \
-      | json2log "${dir}" >&2
+      | sed -f ./sed/protobuf2json.sed \
+      | jq -r -f ./jq/image-build-logging.jq --arg req_id "${req_id}" --arg color "$(color)" --arg image "${project['image']}${dir}" >&2
   }
 
   image_pull () {
