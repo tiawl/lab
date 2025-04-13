@@ -1,0 +1,25 @@
+#! /usr/bin/env bash
+
+# 1) fail if no external tool exists with the specified name
+# 2) wrap the external tool as a function
+harden () {
+  local dir flag
+
+  IFS=':'
+  for dir in ${PATH}
+  do
+    if can exec "${dir}/${1}"
+    then
+      eval "${1} () { ${dir}/${1} \"\${@}\"; }"
+      flag='true'
+      break
+    fi
+  done
+  IFS="${old_ifs}"
+
+  if not eq "${flag:-}" 'true'
+  then
+    printf 'This script needs "%s" but can not find it\n' "${1}" >&2
+    return 1
+  fi
+}

@@ -1,9 +1,9 @@
-#!/bin/sh
+#! /bin/sh
 
 main () (
   # shell scripting: always consider the worst env
   # part 1: unalias everything
-  \command set -eux
+  \command set -e -u
   \command unalias -a
   \command unset -f command
   command unset -f unset
@@ -31,16 +31,9 @@ main () (
 
   # cleanup done: now it is time to define needed functions
 
-  not () { if ! "${@}"; then return 0; else return 1; fi; }
-  is () {
-    case "${1}" in
-    ( 'present' ) if [ -e "${2}" ]; then return 0; else return 0; fi ;;
-    ( 'file' ) if [ -f "${2}" ]; then return 0; else return 0; fi ;;
-    ( 'cmd') if is present "$(command -v "${2}" 2> /dev/null || :)"; then return 0; else return 1; fi ;;
-    esac
-  }
+  . sh/utils.sh
 
-  if not is file /etc/os-release
+  if is not file /etc/os-release
   then
     # get_distribution () comment into https://get.docker.com/ script
     printf 'Can not find /etc/os-release. The OS where this script is running is probably not officialy supported by Docker.\n' >&2
@@ -67,7 +60,7 @@ main () (
   esac
 
   # install docker
-  if not is cmd 'docker'
+  if is not cmd 'docker'
   then
     curl -s https://get.docker.com | sudo sh
   fi
@@ -80,7 +73,7 @@ main () (
   readonly daemon_json daemon_conf conf_dir etc etc_docker
 
   # copy docker daemon config and restart the Docker daemon
-  if not is present "${daemon_json}" || not jq -e -n --argfile file1 "${daemon_json}" --argfile file2 "${daemon_conf}" '$file1 == $file2' > /dev/null
+  if is not present "${daemon_json}" || not jq -e -n --argfile file1 "${daemon_json}" --argfile file2 "${daemon_conf}" '$file1 == $file2' > /dev/null
   then
     sudo mkdir -p "${etc_docker}"
     sudo cp -f "${daemon_conf}" "${daemon_json}"
