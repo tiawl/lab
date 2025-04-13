@@ -24,7 +24,7 @@ encode () {
 req () {
   str starts "${2}" '/'
 
-  local socket_path api_version method endpoint encoded_endpoint key
+  local socket_path api_version method endpoint encoded_endpoint key done
   socket_path='/var/run/docker.sock'
   api_version='v1.48'
   method="${1}"
@@ -36,9 +36,10 @@ req () {
   for key in ${!json2queryparam[@]}
   do
     endpoint="${endpoint:-}$(jq -r -n '"&" + (['"${json2queryparam["${key}"]}"' | to_entries[] | .key + "=" + .value] | join("&"))')"
-    if not eq "${@: -1}" 'Content-Type: application/json'
+    if str empty "${done:-}"
     then
       set -- "${@}" '-H' 'Content-Type: application/json'
+      done='true'
     fi
     set -- "${@}" '--data' "${json2queryparam["${key}"]}"
   done
