@@ -18,6 +18,7 @@ main () (
 
   # shell scripting: always consider the worst env
   # part 2: remove already defined functions
+  set -f
   for func in $(set)
   do
     func="${func#"${func%%[![:space:]]*}"}"
@@ -27,6 +28,7 @@ main () (
     ( * ) ;;
     esac
   done
+  set +f
   IFS="${old_ifs}"
 
   # cleanup done: now it is time to define needed functions
@@ -46,14 +48,12 @@ main () (
   case "${dist}" in
   ( 'ubuntu'|'debian' )
     sudo apt-get update -y
-    # coreutils: for GNU-env, GNU-mktemp and GNU-shuf
-    # git: it should already be here
+    # coreutils: for GNU-env, GNU-mktemp and GNU-sha256sum
     # bc: currently not needed but it could be useful for potention evolution
     sudo apt-get install -y \
       coreutils \
-      git \
       bc \
-      bash curl jq openssh-client protobuf-compiler sed tar ;;
+      bash curl git jq openssh-client protobuf-compiler sed tar ;;
   ( * )
     printf 'Unknown OS: %s\n' "${dist}" >&2
     return 1 ;;

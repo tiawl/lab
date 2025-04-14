@@ -6,6 +6,7 @@ harden () {
   local dir flag
 
   IFS=':'
+  set -f
   for dir in ${PATH}
   do
     if can exec "${dir}/${1}"
@@ -15,6 +16,7 @@ harden () {
       break
     fi
   done
+  set +f
   IFS="${old_ifs}"
 
   if not eq "${flag:-}" 'true'

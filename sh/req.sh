@@ -14,20 +14,23 @@ encode () {
 
   local str char
   str="${1}"
+  set -f
   for char in ${!encoded[@]}
   do
     str="${str//"${char}"/"${encoded["${char}"]}"}"
   done
+  set +f
   printf '%s\n' "${str}"
 }
 
+# TODO: remove this and manage request in each docker client function
 req () {
   str starts "${2}" '/'
 
-  local socket_path api_version method endpoint encoded_endpoint key done
+  local socket_path method endpoint encoded_endpoint key done
   socket_path='/var/run/docker.sock'
-  api_version='v1.48'
-  method="${1}"
+  method="${1^^}"
+  set -f
   for key in ${!encode_me[@]}
   do
     encoded_endpoint="${encoded_endpoint:-}${encoded_endpoint:+&}${key}=$(encode "${encode_me["${key}"]}")"
@@ -43,20 +46,19 @@ req () {
     fi
     set -- "${@}" '--data' "${json2queryparam["${key}"]}"
   done
-  encoded_endpoint="http://${api_version}${2}${encoded_endpoint:-}"
-  endpoint="http://${api_version}${2}${endpoint:-}"
-  readonly socket_path api_version method endpoint encoded_endpoint
+  set +f
+  encoded_endpoint="http://${version[api]}${2}${encoded_endpoint:-}"
+  endpoint="http://${version[api]}${2}${endpoint:-}"
+  readonly socket_path method endpoint encoded_endpoint
 
   shift 2
   declare -A encode_me
   declare -a json2queryparam
 
-  jq -n -r 'include "jq/module-color"; colored("'"${req_id}"'"; '"$(color)"') + " '"${method^^}"' '"${endpoint//\"/\\\"}"'"' >&2
+  jq -n -r 'include "jq/module-color"; colored("'"${req_id}"'"; '"$(color)"') + " '"${method}"' '"${endpoint//\"/\\\"}"'"' >&2
 
   case "${method}" in
-  ( 'get' ) curl -s --unix-socket "${socket_path}" -X GET "${@}" "${encoded_endpoint}" ;;
-  ( 'post' ) curl -s --unix-socket "${socket_path}" -X POST "${@}" "${encoded_endpoint}" ;;
-  ( 'del' ) curl -s --unix-socket "${socket_path}" -X DELETE "${@}" "${encoded_endpoint}" ;;
+  ( 'GET'|'POST'|'DELETE' ) curl -s --unix-socket "${socket_path}" -X "${method}" "${@}" "${encoded_endpoint}" ;;
   ( * ) return 1 ;;
   esac
 }

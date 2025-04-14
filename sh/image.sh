@@ -2,7 +2,7 @@
 
 source_dir () {
   local file
-  for file in sh/image/*
+  for file in "${sdir}/sh/image/"*
   do
     source "${file}"
   done
@@ -15,7 +15,9 @@ image () {
   ( 'build' ) image_build "${@}" ;;
   ( 'pull' ) image_pull "${@}" ;;
   ( 'tag' ) image_tag "${@}" ;;
-  ( 'remove' ) : ;;
+  ( 'list' ) image_list "${@}" ;;
+  ( 'remove' ) image_remove "${@}" ;;
+  ( 'prune' ) image_prune "${@}" ;;
   ( 'tagged' ) image_tagged "${@}" ;;
   ( * ) return 1 ;;
   esac
