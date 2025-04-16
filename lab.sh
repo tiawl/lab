@@ -78,19 +78,20 @@ main () {
   harden protoc
   harden sed
   harden sha256sum
+  #harden shuf
   harden ssh
   harden tar
+  #harden tee
 
   req_id='0'
   uid="$(id -u)"
   readonly uid
 
-  declare -A sep loc project version
+  declare -A sep loc project version path
   declare -a rainbow
   sep[image]='/'
   sep[tag]=':'
   sep[container]='.'
-  sep[hash]='-'
   loc[image]="local${sep[image]}"
   project[container]="lab${sep[container]}"
   project[image]="lab${sep[image]}"
@@ -99,6 +100,7 @@ main () {
   version[project]="${version[project]%\.*}.${version[project]#*-}"
   version[alpine]='3.21'
   version[api]='v1.48'
+  path[socket]='/var/run/docker.sock'
   rainbow=( '21' '27' '33' '39' '45' '51' '50' '49' '48' '47' '46' '82' '118' '154' '190' '226' '220' '214' '208' '202' '196' '197' '198' '199' '200' '201' '165' '129' '93' '57' )
 
   shuffle () {

@@ -2,31 +2,70 @@
 
 include "jq/module-color";
 
-.[] |
-  if length > 3
+def move_error_to_last_position:
+  [
+    . as $array |
+    (
+      $array[] |
+      if has("vertexes")
+      then
+        (
+          .vertexes |
+          map(select(has("error") | not)) |
+          select(length > 0) |
+          {"vertexes": .}
+        )
+      else
+        .
+      end
+    ),(
+      $array[] |
+      if has("vertexes")
+      then
+        (
+          .vertexes |
+          map(select(has("error"))) |
+          select(length > 0) |
+          {"vertexes": .}
+        )
+      else
+        empty
+      end
+    )
+  ];
+
+. | move_error_to_last_position | .[] |
+  if length > 1
   then
     ("Error: protobuf2json should build JSON objects with unique key but jq found a JSON object with more than one key" | halt_error(1))
   elif has("vertexes")
   then
-    (.vertexes |
-      if any(.[]; has("started")) and any(.[]; has("completed"))
+    (
+      .vertexes |
+      if any(.[]; has("error"))
       then
-        (.[] | select(has("name")) | colored($req_id; $color) + " > image build " + $image + " > " + .name)
+        (reset(bold(colored($req_id; $color))) + " > image build " + $image + " > " + reset(colored("[ERROR] " + .[].error + "\n"; 1)) | halt_error(1))
+      elif any(.[]; has("started")) and any(.[]; has("completed"))
+      then
+        (.[] | select(has("name")) | reset(bold(colored($req_id; $color))) + " > image build " + $image + " > " + .name)
       else
         empty
-      end)
+      end
+    )
   elif has("statuses")
   then
-    (.statuses |
+    (
+      .statuses |
       if any(.[]; has("started")) and any(.[]; has("completed"))
       then
-        (.[] | select(has("ID")) | colored($req_id; $color) + " > image build " + $image + " > " + .ID)
+        (.[] | select(has("ID")) | reset(bold(colored($req_id; $color))) + " > image build " + $image + " > " + .ID)
       else
         empty
-      end)
+      end
+    )
   elif has("warnings")
   then
-    (.warnings[] | select(has("short")) | colored($req_id; $color) + " > image build " + $image + " > [WARNING] " + .short)
+    (.warnings[] | select(has("short")) | reset(bold(colored($req_id; $color))) + " > image build " + $image + " > " + reset(colored("[WARNING] " + .short; 3)))
   else
-    ("Error: Unknown protobuf message type: " + keys_unsorted[0] + "\n" | halt_error(1))
+    ("protobuf2json: Unknown protobuf message type: " + keys_unsorted[0] + "\n" | halt_error(1))
   end

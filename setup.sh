@@ -48,7 +48,7 @@ main () (
   case "${dist}" in
   ( 'ubuntu'|'debian' )
     sudo apt-get update -y
-    # coreutils: for GNU-env, GNU-mktemp and GNU-sha256sum
+    # coreutils: GNU-env, GNU-mktemp, GNU-sha256sum, GNU-shuf and GNU-tee
     # bc: currently not needed but it could be useful for potention evolution
     sudo apt-get install -y \
       coreutils \
