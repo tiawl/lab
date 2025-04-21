@@ -1,7 +1,7 @@
 #! /usr/bin/env bash
 
 urlencode () {
-  declare -A encoded
+  local -A encoded
   encoded['{']='%7B'
   encoded['}']='%7D'
   encoded[':']='%3A'

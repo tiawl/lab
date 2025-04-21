@@ -38,26 +38,27 @@ main () {
   # cleanup done: now it is time to define needed functions
 
   dirname () {
-    local tmp="${1:-.}"
+    local parent
+    parent="${1:-.}"
 
-    if [[ "${tmp}" != *[!/]* ]]
+    if [[ "${parent}" != *[!/]* ]]
     then
       printf '/\n'
       return
     fi
 
-    tmp="${tmp%%"${tmp##*[!/]}"}"
+    parent="${parent%%"${parent##*[!/]}"}"
 
-    if [[ "${tmp}" != */* ]]
+    if [[ "${parent}" != */* ]]
     then
       printf '.\n'
       return
     fi
 
-    tmp="${tmp%/*}"
-    tmp="${tmp%%"${tmp##*[!/]}"}"
+    parent="${parent%/*}"
+    parent="${parent%%"${parent##*[!/]}"}"
 
-    printf '%s\n' "${tmp:-/}"
+    printf '%s\n' "${parent:-/}"
   }
 
   # TODO: use sdir
@@ -74,7 +75,7 @@ main () {
   harden git
   harden id
   harden jq
-  #harden mktemp
+  harden mktemp
   harden protoc
   harden sed
   harden sha256sum
@@ -83,12 +84,22 @@ main () {
   harden tar
   #harden tee
 
-  req_id='0'
-  uid="$(id -u)"
-  readonly uid
+  global tmp uid
+  tmp="$(mktemp --directory)"
+  uid="$(id --user)"
+  readonly tmp uid
 
-  declare -A sep loc project version path
-  declare -a rainbow
+  cleanup () {
+    builder prune
+    rm --recursive --force "${tmp}"
+  }
+
+  trap 'cleanup' EXIT
+
+  var set req_id 0
+
+  global -A sep loc project version path
+  global -a rainbow
   sep[image]='/'
   sep[tag]=':'
   sep[container]='.'
@@ -102,10 +113,11 @@ main () {
   version[api]='v1.48'
   path[socket]='/var/run/docker.sock'
   rainbow=( '21' '27' '33' '39' '45' '51' '50' '49' '48' '47' '46' '82' '118' '154' '190' '226' '220' '214' '208' '202' '196' '197' '198' '199' '200' '201' '165' '129' '93' '57' )
+  readonly sep loc project version path
 
   shuffle () {
-    local i tmp size max rand
-    declare -n array="${1}"
+    local i array_i size max rand
+    local -n array="${1}"
 
     size="${#array[*]}"
     max="$(( 32768 / size * size ))"
@@ -114,16 +126,17 @@ main () {
     do
       while (( (rand="${RANDOM}") >= max )); do :; done
       rand="$(( rand % (i+1) ))"
-      tmp="${array[i]}"
+      array_i="${array[i]}"
       array[i]="${array[rand]}"
-      array[rand]="${tmp}"
+      array[rand]="${array_i}"
     done
   }
 
   color () {
     set -- "${rainbow[@]}"
     local n
-    n="$(( (req_id % 30) + 1 ))"
+    var get req_id
+    n="$(( ("${REPLY[req_id]}" % 30) + 1 ))"
     readonly n
     printf '%s\n' "${!n}"
   }

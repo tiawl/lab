@@ -9,5 +9,4 @@ image_prune () {
     image remove "${img%:*}" "${img#*:}"
   done
   set +f
-  req_id="$(( req_id + 1 ))"
 }

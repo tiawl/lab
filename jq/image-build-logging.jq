@@ -1,4 +1,4 @@
-# !/usr/bin/env -S jq -f
+# !/usr/bin/env --split-string jq --from-file
 
 include "jq/module-color";
 
@@ -63,6 +63,9 @@ def move_error_to_last_position:
         empty
       end
     )
+  elif has("logs")
+  then
+    (.logs[] | select(has("msg")) | reset(bold(colored($req_id; $color))) + " > image build " + $image + " > " + (.msg | rtrimstr("\n")))
   elif has("warnings")
   then
     (.warnings[] | select(has("short")) | reset(bold(colored($req_id; $color))) + " > image build " + $image + " > " + reset(colored("[WARNING] " + .short; 3)))

@@ -1,9 +1,8 @@
 #! /usr/bin/env bash
 
-network () {
+tag () {
   case "${1}" in
-  ( 'create' ) : ;;
-  ( 'remove' ) : ;;
+  ( 'list' ) tag_list "${@}" ;;
   ( * ) return 1 ;;
   esac
 }

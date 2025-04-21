@@ -8,8 +8,9 @@ image_remove () {
   method='DELETE'
   readonly endpoint method
 
-  req_id="$(( req_id + 1 ))"
-  jq -n -r 'include "jq/module-color"; reset(bold(colored("'"${req_id}"'"; '"$(color)"'))) + " '"${method}"' '"${endpoint//\"/\\\"}"'"' >&2
+  var incr req_id
+  var get req_id
+  jq --null-input --raw-output 'include "jq/module-color"; reset(bold(colored("'"${REPLY[req_id]}"'"; '"$(color)"'))) + " '"${method}"' '"${endpoint//\"/\\\"}"'"' >&2
 
   curl --silent --show-error --request "${method}" --unix-socket "${path[socket]}" "${endpoint}" \
     | jq '.'

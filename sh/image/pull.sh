@@ -9,9 +9,10 @@ image_pull () {
   method='POST'
   readonly endpoint method img
 
-  req_id="$(( req_id + 1 ))"
-  jq -n -r 'include "jq/module-color"; reset(bold(colored("'"${req_id}"'"; '"$(color)"'))) + " '"${method}"' '"${endpoint//\"/\\\"}"'"' >&2
+  var incr req_id
+  var get req_id
+  jq --null-input --raw-output 'include "jq/module-color"; reset(bold(colored("'"${REPLY[req_id]}"'"; '"$(color)"'))) + " '"${method}"' '"${endpoint//\"/\\\"}"'"' >&2
 
-  curl --silent --show-error --request "${method}" --unix-socket "${path[socket]}" "${endpoint}" \
-    | jq -r 'include "jq/module-color"; reset(bold(colored("'"${req_id}"'"; '"$(color)"'))) + " > image pull '"${img}"' > " + .status + (if .progress | length > 0 then " " else "" end) + .progress' >&2
+  curl --silent --show-error --request "${method}" --unix-socket "${path[socket]}" --no-buffer "${endpoint}" \
+    | jq --unbuffered --raw-output 'include "jq/module-color"; reset(bold(colored("'"${REPLY[req_id]}"'"; '"$(color)"'))) + " > image pull '"${img}"' > " + .status + (if .progress | length > 0 then " " else "" end) + .progress' >&2
 }

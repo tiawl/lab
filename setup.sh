@@ -47,10 +47,10 @@ main () (
 
   case "${dist}" in
   ( 'ubuntu'|'debian' )
-    sudo apt-get update -y
+    sudo apt-get update --assume-yes
     # coreutils: GNU-env, GNU-mktemp, GNU-sha256sum, GNU-shuf and GNU-tee
     # bc: currently not needed but it could be useful for potention evolution
-    sudo apt-get install -y \
+    sudo apt-get install --assume-yes \
       coreutils \
       bc \
       bash curl git jq openssh-client protobuf-compiler sed tar ;;
@@ -62,7 +62,7 @@ main () (
   # install docker
   if is not cmd 'docker'
   then
-    curl -s https://get.docker.com | sudo sh
+    curl --silent --show-error https://get.docker.com | sudo sh
   fi
 
   etc='/etc'
@@ -73,10 +73,10 @@ main () (
   readonly daemon_json daemon_conf conf_dir etc etc_docker
 
   # copy docker daemon config and restart the Docker daemon
-  if is not present "${daemon_json}" || not jq -e -n --argfile file1 "${daemon_json}" --argfile file2 "${daemon_conf}" '$file1 == $file2' > /dev/null
+  if is not present "${daemon_json}" || not jq --exit-status --null-input --argfile file1 "${daemon_json}" --argfile file2 "${daemon_conf}" '$file1 == $file2' > /dev/null
   then
-    sudo mkdir -p "${etc_docker}"
-    sudo cp -f "${daemon_conf}" "${daemon_json}"
+    sudo mkdir --parents "${etc_docker}"
+    sudo cp --force "${daemon_conf}" "${daemon_json}"
     if is cmd 'systemctl'
     then
       sudo systemctl restart docker
