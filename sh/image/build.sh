@@ -7,7 +7,7 @@ image_build () {
   }
 
   shift
-  local buildargs repo method tag logged_endpoint endpoint replace_me
+  local json repo method tag logged_endpoint endpoint replace_me
   repo="${1}"
   method='POST'
   replace_me='XXXXXXXXXX'
@@ -15,9 +15,9 @@ image_build () {
   local -a curl_cmd
   curl_cmd=('curl' '--silent' '--show-error' '--request' "${method}" '--unix-socket' "${path[socket]}" '--data-binary' '@-' '--header' 'Content-Type: application/x-tar' '--no-buffer')
 
-  buildargs="{\"FROM\":\"${2}\"}"
+  json="$(jq --monochrome-output --null-input --compact-output '$ARGS.positional | [.[:$n], .[$n:]] | transpose | map({ (first): last }) | add' --argjson n ${#buildargs[@]} --args "${!buildargs[@]}" "${buildargs[@]}")"
   endpoint="http://${version[api]}/build?dockerfile=dockerfiles/${repo}/Dockerfile&version=2&t=${project[image]}${repo}${sep[tag]}${replace_me}&buildargs="
-  logged_endpoint="${endpoint}${buildargs}"
+  logged_endpoint="${endpoint}${json}"
   tag="$({
     tar --directory "${sdir}" --create --file=- --sort=name --mtime='UTC 2019-01-01' --group=0 --owner=0 --numeric-owner "dockerfiles/${repo}"
     printf '%s\n' "${curl_cmd[@]}" "${logged_endpoint}"
@@ -25,8 +25,8 @@ image_build () {
   tag="${tag%% *}"
   tag="${tag:0:10}"
   logged_endpoint="${logged_endpoint/"${replace_me}"/"${tag}"}"
-  endpoint="${endpoint/"${replace_me}"/"${tag}"}$(urlencode "${buildargs}")"
-  readonly repo method tag buildargs replace_me logged_endpoint endpoint
+  endpoint="${endpoint/"${replace_me}"/"${tag}"}$(urlencode "${json}")"
+  readonly repo method tag json replace_me logged_endpoint endpoint
 
   if not image tagged "${repo}" "${tag}"
   then

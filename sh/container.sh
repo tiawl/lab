@@ -2,6 +2,7 @@
 
 container () {
   case "${1}" in
+  ( 'copy' ) container_copy "${@}" ;;
   ( 'create' ) container_create "${@}" ;;
   ( 'start' ) printf 'TODO\n' ;;
   ( 'stop' ) : ;;

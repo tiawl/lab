@@ -117,7 +117,8 @@ main () {
 
   shuffle () {
     local i array_i size max rand
-    local -n array="${1}"
+    local -n array
+    array="${1}"
 
     size="${#array[*]}"
     max="$(( 32768 / size * size ))"
@@ -153,8 +154,13 @@ main () {
     image remove 'alpine' "${version[alpine]}"
   fi
 
-  image build 'bounce' "${loc[image]}alpine${sep[tag]}${version[alpine]}"
+  global -A buildargs
+  buildargs[FROM]="${loc[image]}alpine${sep[tag]}${version[alpine]}"
+  buildargs[KEY_PATH]="/root/.ssh/host2lab"
+
+  image build 'bounce'
   container create 'bounce'
+  container copy 'bounce' "${buildargs[KEY_PATH]}.pub" "${HOME}/.ssh"
 }
 
 main "${@}"

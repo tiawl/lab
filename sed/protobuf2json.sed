@@ -3,6 +3,16 @@
 # Add `]` before each `}`
 s/^\(\s*\)}$/\1]}/g
 
+# Escape `"` into strings
+:esc_dquotes
+s/^\(\s*[^:]*:\) "\(.*[^\\]\)"\([^$]\)/\1 "\2\\"\3/g
+t esc_dquotes
+
+# Unescape `'` into strings
+:unesc_quotes
+s/^\(\s*[^:]*:\) "\(.*\)\\'/\1 "\2'/g
+t unesc_quotes
+
 # Add `"` around PROTOBUF message fields and braces around key-value pair => JSON object
 s/^\(\s*\)\([^:]*\): \(.*\)/\1{"\2": \3}/
 
