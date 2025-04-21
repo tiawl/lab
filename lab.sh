@@ -62,7 +62,7 @@ main () {
   }
 
   # TODO: use sdir
-  sdir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &> /dev/null && printf '%s\n' "${PWD}")"
+  sdir="$(CDPATH='' cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &> /dev/null && printf '%s\n' "${PWD}")"
   readonly sdir
 
   source "${sdir}/sh/utils.sh"

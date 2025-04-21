@@ -6,7 +6,7 @@ container () {
   ( 'start' ) container_start "${@}" ;;
   ( 'stop' ) : ;;
   ( 'remove' ) : ;;
-  ( 'up' ) printf 'TODO\n' ;;
+  ( 'up' ) container create "${@}"; container start "${@}" ;;
   ( 'down' ) : ;;
   ( 'created' ) : ;;
   ( 'running' ) : ;;
