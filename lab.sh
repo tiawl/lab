@@ -169,8 +169,16 @@ main () {
   container resource copy 'bounce' "${path[BOUNCE_SSH_KEY]}" "${path[SSH_HOME]}"
   container resource copy 'bounce' "${path[BOUNCE_SSH_KEY]}.pub" "${path[SSH_HOME]}"
 
+  container start 'bounce'
+
+  local bounce_ip
+  bounce_ip="$(network ip get 'bounce')"
+  readonly bounce_ip
+
+  ssh-keygen -R "${bounce_ip}"
+  ssh -i "${path[SSH_HOME]}/${buildargs[KEY_NAME]}" "${USER}@${bounce_ip}"
+
   # docker container rm -f lab.bounce; docker image prune --all -f; docker buildx prune -f; ./lab.sh
-  # docker start lab.bounce; ssh-keygen -R 172.17.0.2; ssh -i /home/user/.ssh/host2lab user@172.17.0.2
 }
 
 main "${@}"

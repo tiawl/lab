@@ -15,5 +15,6 @@ container_create () {
   var get req_id
   jq --null-input --raw-output 'include "jq/module-color"; reset(bold(colored("'"${REPLY[req_id]}"'"; '"$(color)"'))) + " '"${method}"' '"${logged_endpoint//\"/\\\"}"'"' >&2
 
-  curl --silent --show-error --request "${method}" --unix-socket "${path[socket]}" --header 'Content-Type: application/json' --data "${json}" "${endpoint}" | jq '.'
+  curl --silent --show-error --request "${method}" --unix-socket "${path[socket]}" --header 'Content-Type: application/json' --data "${json}" "${endpoint}" \
+    | jq '.'
 }

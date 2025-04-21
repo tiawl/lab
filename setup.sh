@@ -3,7 +3,7 @@
 main () (
   # shell scripting: always consider the worst env
   # part 1: unalias everything
-  \command set -e -u
+  \command set -e -u -x
   \command unalias -a
   \command unset -f command
   command unset -f unset
@@ -33,7 +33,21 @@ main () (
 
   # cleanup done: now it is time to define needed functions
 
-  . sh/utils.sh
+  dirname () {
+    set -- "${1:-.}"
+    set -- "${1%%"${1##*[!/]}"}"
+
+    [ "${1##*/*}" ] && set -- '.'
+
+    set -- "${1%/*}"
+    set -- "${1%%"${1##*[!/]}"}"
+    printf '%s\n' "${1:-/}"
+  }
+
+  sdir="$(CDPATH='' cd -- "$(dirname -- "${0}")" > /dev/null 2>&1; pwd)"
+  readonly sdir
+
+  . "${sdir}/sh/utils.sh"
 
   if is not file /etc/os-release
   then
@@ -67,7 +81,7 @@ main () (
 
   etc='/etc'
   etc_docker="${etc}/docker"
-  conf_dir="host/${etc_docker#/}"
+  conf_dir="${sdir}/host/${etc_docker#/}"
   daemon_json="${etc_docker}/daemon.json"
   daemon_conf="${conf_dir}/daemon.json"
   readonly daemon_json daemon_conf conf_dir etc etc_docker
@@ -87,6 +101,11 @@ main () (
       printf 'Can not restart Dockerd: unknown service manager\n' >&2
       return 1
     fi
+  fi
+
+  if is not present /etc/ssh/ssh_config.d/accept-new.conf
+  then
+    sudo cp "${sdir}/host/etc/ssh/ssh_config.d/accept-new.conf" /etc/ssh/ssh_config.d
   fi
 )
 
