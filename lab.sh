@@ -90,7 +90,7 @@ main () {
   readonly tmp uid
 
   cleanup () {
-    builder prune
+    image builder cleanup
     rm --recursive --force "${tmp}"
   }
 
@@ -113,7 +113,7 @@ main () {
   version[api]='v1.48'
   path[socket]='/var/run/docker.sock'
   rainbow=( '21' '27' '33' '39' '45' '51' '50' '49' '48' '47' '46' '82' '118' '154' '190' '226' '220' '214' '208' '202' '196' '197' '198' '199' '200' '201' '165' '129' '93' '57' )
-  readonly sep loc project version path
+  readonly sep loc project version
 
   shuffle () {
     local i array_i size max rand
@@ -146,21 +146,31 @@ main () {
 
   source "${sdir}/sh/client.sh"
 
-  if not image tagged "${loc[image]}alpine" "${version[alpine]}"
+  if not image tag exist "${loc[image]}alpine" "${version[alpine]}"
   then
     image pull 'docker.io' 'library' 'alpine' "${version[alpine]}"
     image prune "${loc[image]}alpine${sep[tag]}*"
-    image tag 'alpine' "${version[alpine]}" "${loc[image]}alpine" "${version[alpine]}"
+    image tag create 'alpine' "${version[alpine]}" "${loc[image]}alpine" "${version[alpine]}"
     image remove 'alpine' "${version[alpine]}"
   fi
 
   global -A buildargs
   buildargs[FROM]="${loc[image]}alpine${sep[tag]}${version[alpine]}"
-  buildargs[KEY_PATH]="/root/.ssh/host2lab"
+  buildargs[KEY_NAME]='host2lab'
+  buildargs[USER]='user'
+  buildargs[SSH_HOME]="/home/${buildargs[USER]}/.ssh"
+  buildargs[UID]="${uid}"
+  path[BOUNCE_SSH_KEY]="${buildargs[SSH_HOME]}/${buildargs[KEY_NAME]}"
+  path[SSH_HOME]="${HOME}/.ssh"
+  readonly path
 
   image build 'bounce'
   container create 'bounce'
-  container copy 'bounce' "${buildargs[KEY_PATH]}.pub" "${HOME}/.ssh"
+  container resource copy 'bounce' "${path[BOUNCE_SSH_KEY]}" "${path[SSH_HOME]}"
+  container resource copy 'bounce' "${path[BOUNCE_SSH_KEY]}.pub" "${path[SSH_HOME]}"
+
+  # docker container rm -f lab.bounce; docker image prune --all -f; docker buildx prune -f; ./lab.sh
+  # docker start lab.bounce; ssh-keygen -R 172.17.0.2; ssh -i /home/user/.ssh/host2lab user@172.17.0.2
 }
 
 main "${@}"

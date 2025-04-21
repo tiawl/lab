@@ -2,7 +2,6 @@
 
 container () {
   case "${1}" in
-  ( 'copy' ) container_copy "${@}" ;;
   ( 'create' ) container_create "${@}" ;;
   ( 'start' ) printf 'TODO\n' ;;
   ( 'stop' ) : ;;
@@ -11,6 +10,7 @@ container () {
   ( 'down' ) : ;;
   ( 'created' ) : ;;
   ( 'running' ) : ;;
+  ( 'resource' ) container_resource "${@}" ;;
   ( * ) return 1 ;;
   esac
 }

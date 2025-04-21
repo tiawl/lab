@@ -1,6 +1,6 @@
 #! /usr/bin/env bash
 
-builder_prune () {
+image_builder_cleanup () {
   local endpoint method
   endpoint="http://${version[api]}/build/prune?all=true"
   method='POST'
@@ -12,11 +12,4 @@ builder_prune () {
 
   curl --silent --show-error --request "${method}" --unix-socket "${path[socket]}" "${endpoint}" \
     | jq '.'
-}
-
-builder () {
-  case "${1}" in
-  ( 'prune' ) builder_prune ;;
-  ( * ) return 1 ;;
-  esac
 }

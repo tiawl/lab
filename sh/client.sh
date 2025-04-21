@@ -1,21 +1,16 @@
 #! /usr/bin/env bash
 
-source_all () {
-  local file
-
+source_client () {
   source sh/urlencode.sh
 
-  for file in sh/**/*.sh
+  local file
+
+  shopt -s globstar
+  for file in sh/client/**/*.sh
   do
     source "${file}"
   done
-
-  source sh/builder.sh
-  source sh/image.sh
-  source sh/container.sh
-  source sh/tag.sh
-  source sh/network.sh
-  source sh/volume.sh
+  shopt -u globstar
 }
 
-source_all
+source_client

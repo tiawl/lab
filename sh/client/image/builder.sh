@@ -1,8 +1,9 @@
 #! /usr/bin/env bash
 
-tag () {
+image_builder () {
+  shift
   case "${1}" in
-  ( 'list' ) tag_list "${@}" ;;
+  ( 'cleanup' ) image_builder_cleanup ;;
   ( * ) return 1 ;;
   esac
 }

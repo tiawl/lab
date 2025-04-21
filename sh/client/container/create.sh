@@ -5,7 +5,7 @@ container_create () {
 
   local json endpoint logged_endpoint method img
   img="${project[image]}${1}"
-  json="{\"Hostname\":\"${1}\",\"Image\":\"${img}${sep[tag]}$(tag list "${img}")\"}"
+  json="{\"Hostname\":\"${1}\",\"Image\":\"${img}${sep[tag]}$(image tag list "${img}")\"}"
   endpoint="http://${version[api]}/containers/create?name=${project[container]}${1}"
   logged_endpoint="${endpoint}&$(jq --null-input --raw-output '['"${json}"' | to_entries[] | .key + "=" + .value] | join("&")')"
   method='POST'

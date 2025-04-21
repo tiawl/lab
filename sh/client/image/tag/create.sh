@@ -1,17 +1,16 @@
 #! /usr/bin/env bash
 
-container_copy () {
+image_tag_create () {
   shift
 
   local endpoint method
-  endpoint="http://${version[api]}/containers/${project[container]}${1}/archive?path=${2}"
-  method='GET'
+  endpoint="http://${version[api]}/images/${1}${sep[tag]}${2}/tag?repo=${3}&tag=${4}"
+  method='POST'
   readonly endpoint method
 
   var incr req_id
   var get req_id
   jq --null-input --raw-output 'include "jq/module-color"; reset(bold(colored("'"${REPLY[req_id]}"'"; '"$(color)"'))) + " '"${method}"' '"${endpoint//\"/\\\"}"'"' >&2
 
-  curl --silent --show-error --request "${method}" --unix-socket "${path[socket]}" --output - "${endpoint}" \
-    | tar --extract --directory "${3}"
+  curl --silent --show-error --request "${method}" --unix-socket "${path[socket]}" "${endpoint}"
 }

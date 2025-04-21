@@ -1,6 +1,6 @@
 #! /usr/bin/env bash
 
-image_tagged () {
+image_tag_exist () {
   shift
 
   local filters endpoint logged_endpoint method
