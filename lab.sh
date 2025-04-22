@@ -3,69 +3,36 @@
 main () {
   # shell scripting: always consider the worst env
   # part 1: unalias everything
-  \command set -C -e -u -o pipefail
-  \command unalias -a
-  \command unset -f command
-  command unset -f unset
-  unset -f set
-  unset -f local
-  unset -f readonly
-  unset -f shopt
 
-  shopt -s lastpipe
+  dirname () {
+    \command set -- "${1:-.}"
+    \command set -- "${1%%"${1##*[!/]}"}"
+
+    [ "${1##*/*}" ] && \command set -- '.'
+
+    \command set -- "${1%/*}"
+    \command set -- "${1%%"${1##*[!/]}"}"
+    \command printf '%s\n' "${1:-/}"
+  }
+
+  if [[ -z "${BASH_ENV:-}" ]]
+  then
+    \command exec -c env -i BASH_ENV="$(CDPATH='' \command cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &> /dev/null && \command printf '%s\n' "${PWD}")/sh/utils.sh" bash --norc --noprofile "${BASH_SOURCE[0]}" || exit 1
+  fi
+
+  # cleanup done: now it is time to define needed functions
+
+  on errexit noclobber errtrace functrace nounset pipefail lastpipe
 
   old_ifs="${IFS}"
   readonly old_ifs
 
   IFS=$'\n'
 
-  # shell scripting: always consider the worst env
-  # part 2: remove already defined functions
-  local func
-  set -f
-  for func in $(set)
-  do
-    func="${func#"${func%%[![:space:]]*}"}"
-    func="${func%"${func##*[![:space:]]}"}"
-    case "${func}" in
-    ( *' ()' ) unset -f "${func%' ()'}" ;;
-    ( * ) ;;
-    esac
-  done
-  set +f
-  IFS="${old_ifs}"
-
-  # cleanup done: now it is time to define needed functions
-
-  dirname () {
-    local parent
-    parent="${1:-.}"
-
-    if [[ "${parent}" != *[!/]* ]]
-    then
-      printf '/\n'
-      return
-    fi
-
-    parent="${parent%%"${parent##*[!/]}"}"
-
-    if [[ "${parent}" != */* ]]
-    then
-      printf '.\n'
-      return
-    fi
-
-    parent="${parent%/*}"
-    parent="${parent%%"${parent##*[!/]}"}"
-
-    printf '%s\n' "${parent:-/}"
-  }
-
   # TODO: use sdir
-  sdir="$(CDPATH='' cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &> /dev/null && printf '%s\n' "${PWD}")"
+  sdir="$(CDPATH='' cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &> /dev/null && printf '%s' "${PWD}")"
   readonly sdir
 
-  source "${sdir}/sh/utils.sh"
   source "${sdir}/sh/harden.sh"
 
   harden base64
@@ -84,10 +51,12 @@ main () {
   harden tar
   #harden tee
 
-  global tmp uid
+  global tmp usr uid home
   tmp="$(mktemp --directory)"
-  uid="$(id --user)"
-  readonly tmp uid
+  usr="${USER:-"$(id --user --name)"}"
+  uid="${UID:-"$(id --user)"}"
+  home="${HOME:-"$(printf '%s' ~)"}"
+  readonly tmp usr uid home
 
   cleanup () {
     image builder cleanup
@@ -144,7 +113,7 @@ main () {
 
   shuffle rainbow
 
-  source "${sdir}/sh/client.sh"
+  source "${sdir}/sh/orchestrator.sh"
 
   if not image tag exist "${loc[image]}alpine" "${version[alpine]}"
   then
@@ -157,11 +126,11 @@ main () {
   global -A buildargs
   buildargs[FROM]="${loc[image]}alpine${sep[tag]}${version[alpine]}"
   buildargs[KEY_NAME]='host2lab'
-  buildargs[USER]='user'
+  buildargs[USER]="${usr}"
   buildargs[SSH_HOME]="/home/${buildargs[USER]}/.ssh"
   buildargs[UID]="${uid}"
   path[BOUNCE_SSH_KEY]="${buildargs[SSH_HOME]}/${buildargs[KEY_NAME]}"
-  path[SSH_HOME]="${HOME}/.ssh"
+  path[SSH_HOME]="${home}/.ssh"
   readonly path
 
   image build 'bounce'
@@ -176,9 +145,11 @@ main () {
   readonly bounce_ip
 
   ssh-keygen -R "${bounce_ip}"
-  ssh -i "${path[SSH_HOME]}/${buildargs[KEY_NAME]}" "${USER}@${bounce_ip}"
+  ssh -i "${path[SSH_HOME]}/${buildargs[KEY_NAME]}" "${buildargs[USER]}@${bounce_ip}"
 
   # docker container rm -f lab.bounce; docker image prune --all -f; docker buildx prune -f; ./lab.sh
+
+  container stop 'bounce'
 }
 
 main "${@}"

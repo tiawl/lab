@@ -56,3 +56,29 @@ var () {
   ( 'incr' ) var get "${2}"; var set "${2}" "$(( "${REPLY["${2}"]}" + 1 ))"; unset REPLY["${2}"] ;;
   esac
 }
+
+# bash-only
+on () {
+  while gt "${#}" 0
+  do
+    case "${1}" in
+    ( 'errexit'|'noclobber'|'errtrace'|'functrace'|'nounset'|'pipefail' ) shopt -o "${1}" > /dev/null ;;
+    ( 'lastpipe' ) shopt -s "${1}" ;;
+    ( * ) exit 1 ;;
+    esac
+    shift
+  done
+}
+
+# bash-only
+off () {
+  while gt "${#}" 0
+  do
+    case "${1}" in
+    ( 'errexit'|'noclobber'|'errtrace'|'functrace'|'nounset'|'pipefail' ) set +o "${1}" ;;
+    ( 'lastpipe' ) shopt -u "${1}" ;;
+    ( * ) exit 1 ;;
+    esac
+    shift
+  done
+}

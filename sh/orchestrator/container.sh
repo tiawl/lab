@@ -4,7 +4,7 @@ container () {
   case "${1}" in
   ( 'create' ) container_create "${@}" ;;
   ( 'start' ) container_start "${@}" ;;
-  ( 'stop' ) : ;;
+  ( 'stop' ) container_stop "${@}" ;;
   ( 'remove' ) : ;;
   ( 'up' ) container create "${@}"; container start "${@}" ;;
   ( 'down' ) : ;;

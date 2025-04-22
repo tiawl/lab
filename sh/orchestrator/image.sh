@@ -2,6 +2,7 @@
 
 image () {
   case "${1}" in
+  ( 'assemble' ) image_assemble "${@}" ;;
   ( 'build' ) image_build "${@}" ;;
   ( 'pull' ) image_pull "${@}" ;;
   ( 'list' ) image_list "${@}" ;;

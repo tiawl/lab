@@ -13,7 +13,7 @@ image_build () {
   replace_me='XXXXXXXXXX'
 
   local -a curl_cmd
-  curl_cmd=('curl' '--silent' '--show-error' '--request' "${method}" '--unix-socket' "${path[socket]}" '--data-binary' '@-' '--header' 'Content-Type: application/x-tar' '--no-buffer')
+  curl_cmd=('curl' '--silent' '--show-error' '--request' "${method}" '--unix-socket' "${path[socket]}" '--data-binary' '@-' '--header' 'Content-Type: application/x-tar' '--no-buffer' '--write-out' "%{stderr}$(printf "%$(( ${#REPLY[req_id]} + 1 ))s")> HTTP %{response_code}\n")
 
   json="$(jq --monochrome-output --null-input --compact-output '$ARGS.positional | [.[:$n], .[$n:]] | transpose | map({ (first): last }) | add' --argjson n ${#buildargs[@]} --args "${!buildargs[@]}" "${buildargs[@]}")"
   endpoint="http://${version[api]}/build?version=2&t=${project[image]}${repo}${sep[tag]}${replace_me}&buildargs="
