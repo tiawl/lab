@@ -2,8 +2,8 @@
 
 image () {
   case "${1}" in
-  ( 'assemble' ) image_assemble "${@}" ;;
   ( 'build' ) image_build "${@}" ;;
+  ( 'merge' ) image_merge "${@}" ;;
   ( 'pull' ) image_pull "${@}" ;;
   ( 'list' ) image_list "${@}" ;;
   ( 'remove' ) image_remove "${@}" ;;

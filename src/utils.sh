@@ -20,11 +20,14 @@ is () {
   ( 'present' ) if [ -e "${2}" ]; then return 0; else return 1; fi ;;
   ( 'file' ) if [ -f "${2}" ]; then return 0; else return 1; fi ;;
   ( 'dir' ) if [ -d "${2}" ]; then return 0; else return 1; fi ;;
+  ( 'socket' ) if [ -S "${2}" ]; then return 0; else return 1; fi ;;
   ( 'cmd') if is present "$(command -v "${2}" 2> /dev/null || :)"; then return 0; else return 1; fi ;;
   # bash-only
   ( 'array' ) case "$(declare -p "${2}" 2> /dev/null)" in ( "declare -a ${2}" ) return 0 ;; ( * ) return 1 ;; esac ;;
   # bash-only
   ( 'map' ) case "$(declare -p "${2}" 2> /dev/null)" in ( "declare -A ${2}" ) return 0 ;; ( * ) return 1 ;; esac ;;
+  # bash-only
+  ( 'func' ) if declare -F "${2}" > /dev/null; then return 0; else return 1; fi ;;
   esac
 }
 
@@ -43,27 +46,12 @@ global () {
 }
 
 # bash-only
-var () {
-  mkdir -p "${tmp}/vars"
-  if is not map REPLY
-  then
-    unset REPLY
-    global -A REPLY
-  fi
-  case "${1}" in
-  ( 'get' ) REPLY["${2}"]="$(< "${tmp}/vars/${2}")" ;;
-  ( 'set' ) set +C; printf '%s' "${3}" > "${tmp}/vars/${2}"; set -C ;;
-  ( 'incr' ) var get "${2}"; var set "${2}" "$(( "${REPLY["${2}"]}" + 1 ))"; unset REPLY["${2}"] ;;
-  esac
-}
-
-# bash-only
 on () {
   while gt "${#}" 0
   do
     case "${1}" in
-    ( 'errexit'|'noclobber'|'errtrace'|'functrace'|'nounset'|'pipefail' ) shopt -o "${1}" > /dev/null ;;
-    ( 'lastpipe' ) shopt -s "${1}" ;;
+    ( 'errexit'|'noclobber'|'errtrace'|'functrace'|'nounset'|'pipefail' ) shopt -o -s -q "${1}" ;;
+    ( 'lastpipe'|'globstar' ) shopt -s -q "${1}" ;;
     ( * ) exit 1 ;;
     esac
     shift
@@ -75,10 +63,32 @@ off () {
   while gt "${#}" 0
   do
     case "${1}" in
-    ( 'errexit'|'noclobber'|'errtrace'|'functrace'|'nounset'|'pipefail' ) set +o "${1}" ;;
-    ( 'lastpipe' ) shopt -u "${1}" ;;
+    ( 'errexit'|'noclobber'|'errtrace'|'functrace'|'nounset'|'pipefail' ) shopts -o -u -q "${1}" ;;
+    ( 'lastpipe'|'globstar' ) shopt -u -q "${1}" ;;
     ( * ) exit 1 ;;
     esac
     shift
   done
 }
+
+# bash-only
+trap_add () {
+  local stage
+  stage='0'
+  if is not func 'trap_exit_0'
+  then
+    trap -- 'trap_exit_0' EXIT
+  fi
+  while is func "trap_exit_$(( ++stage ))"; do :; done
+  (( stage-- ))
+  eval "trap_exit_${stage} () { ${*}; trap_exit_$(( stage + 1 )); }; trap_exit_$(( stage + 1 )) () { :; }"
+}
+
+# TODO: how to make it works for setup.sh ?? bash-only
+global -A sep version path
+sep[image]='/'
+sep[tag]=':'
+sep[container]='.'
+version[docker_api]='v1.48'
+path[docker_socket]='/var/run/docker.sock'
+readonly sep

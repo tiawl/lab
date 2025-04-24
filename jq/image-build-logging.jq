@@ -44,10 +44,10 @@ def move_error_to_last_position:
       .vertexes |
       if any(.[]; has("error"))
       then
-        (reset(bold(colored($req_id; $color))) + " > image build " + $image + " > " + reset(colored("[ERROR] " + .[].error + "\n"; 1)) | halt_error(1))
+        ("image build " + $image + " > " + reset(colored("[ERROR] " + .[].error + "\n"; 1)) | halt_error(1))
       elif any(.[]; has("started")) and any(.[]; has("completed"))
       then
-        (.[] | select(has("name")) | reset(bold(colored($req_id; $color))) + " > image build " + $image + " > " + .name)
+        (.[] | select(has("name")) | "image build " + $image + " > " + .name)
       else
         empty
       end
@@ -58,17 +58,17 @@ def move_error_to_last_position:
       .statuses |
       if any(.[]; has("started")) and any(.[]; has("completed"))
       then
-        (.[] | select(has("ID")) | reset(bold(colored($req_id; $color))) + " > image build " + $image + " > " + .ID)
+        (.[] | select(has("ID")) | "image build " + $image + " > " + .ID)
       else
         empty
       end
     )
   elif has("logs")
   then
-    (.logs[] | select(has("msg")) | reset(bold(colored($req_id; $color))) + " > image build " + $image + " > " + (.msg | rtrimstr("\n")))
+    (.logs[] | select(has("msg")) | "image build " + $image + " > " + (.msg | rtrimstr("\n")))
   elif has("warnings")
   then
-    (.warnings[] | select(has("short")) | reset(bold(colored($req_id; $color))) + " > image build " + $image + " > " + reset(colored("[WARNING] " + .short; 3)))
+    (.warnings[] | select(has("short")) | "image build " + $image + " > " + reset(colored("[WARNING] " + .short; 3)))
   else
     ("protobuf2json: Unknown protobuf message type: " + keys_unsorted[0] + "\n" | halt_error(1))
   end

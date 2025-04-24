@@ -11,7 +11,7 @@ harden () {
   do
     if can exec "${dir}/${1}"
     then
-      eval "${1} () { ${dir}/${1} \"\${@}\"; }"
+      eval "${1//-/_} () { ${dir}/${1} \"\${@}\"; }"
       flag='true'
       break
     fi

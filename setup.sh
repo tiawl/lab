@@ -47,7 +47,7 @@ main () (
   sdir="$(CDPATH='' cd -- "$(dirname -- "${0}")" > /dev/null 2>&1; pwd)"
   readonly sdir
 
-  . "${sdir}/sh/utils.sh"
+  . "${sdir}/src/utils.sh"
 
   if is not file /etc/os-release
   then
@@ -91,22 +91,15 @@ main () (
   then
     sudo mkdir --parents "${etc_docker}"
     sudo cp --force "${daemon_conf}" "${daemon_json}"
-    if is cmd 'systemctl'
-    then
-      sudo systemctl restart docker
-    elif is cmd 'service'
-    then
-      sudo service docker restart
-    else
-      printf 'Can not restart Dockerd: unknown service manager\n' >&2
-      return 1
-    fi
+    sudo systemctl restart docker
   fi
 
   if is not present /etc/ssh/ssh_config.d/accept-new.conf
   then
     sudo cp "${sdir}/host/etc/ssh/ssh_config.d/accept-new.conf" /etc/ssh/ssh_config.d
   fi
+
+  # TODO: add systemd buildkitd socket
 )
 
 main "${@}"
