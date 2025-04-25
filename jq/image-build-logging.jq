@@ -1,6 +1,6 @@
-# !/usr/bin/env --split-string jq --from-file
+# !/usr/bin/env --split-string gojq --from-file
 
-include "jq/module-color";
+import "module-color" as color;
 
 def move_error_to_last_position:
   [
@@ -44,7 +44,7 @@ def move_error_to_last_position:
       .vertexes |
       if any(.[]; has("error"))
       then
-        ("image build " + $image + " > " + reset(colored("[ERROR] " + .[].error + "\n"; 1)) | halt_error(1))
+        ("image build " + $image + " > " + color::text("[ERROR] " + .[].error + "\n"; 1) | halt_error(1))
       elif any(.[]; has("started")) and any(.[]; has("completed"))
       then
         (.[] | select(has("name")) | "image build " + $image + " > " + .name)
@@ -68,7 +68,7 @@ def move_error_to_last_position:
     (.logs[] | select(has("msg")) | "image build " + $image + " > " + (.msg | rtrimstr("\n")))
   elif has("warnings")
   then
-    (.warnings[] | select(has("short")) | "image build " + $image + " > " + reset(colored("[WARNING] " + .short; 3)))
+    (.warnings[] | select(has("short")) | "image build " + $image + " > " + color::text("[WARNING] " + .short; 3))
   else
-    ("protobuf2json: Unknown protobuf message type: " + keys_unsorted[0] + "\n" | halt_error(1))
+    ("protobuf2json: Unknown protobuf message type: " + keys[0] + "\n" | halt_error(1))
   end

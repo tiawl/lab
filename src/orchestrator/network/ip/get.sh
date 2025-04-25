@@ -13,7 +13,7 @@ network_ip_get () {
   {
     {
       curl --silent --fail --request "${method}" --unix-socket "${path[docker_socket]}" --write-out '%{stderr}%{scheme} %{response_code}\n' "${endpoint}" 2>&3 \
-        | jq --raw-output '.NetworkSettings.Networks[$net].IPAddress' --arg net "${2:-bridge}" >&4
+        | gojq --raw-output '.NetworkSettings.Networks[$net].IPAddress' --arg net "${2:-bridge}" >&4
     } 3>&1 4>&5 | sed --file "${sdir}/sed/colored_http_code.sed" >&2
   } 5>&1
 }

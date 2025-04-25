@@ -15,6 +15,6 @@ image_tag_defined () {
 
   {
     curl --silent --fail --request "${method}" --unix-socket "${path[docker_socket]}" --write-out "%{stderr}%{scheme} %{response_code}\n" "${endpoint}" 2>&3 \
-      | jq --exit-status '. | length > 0' > /dev/null
+      | gojq --exit-status '. | length > 0' > /dev/null
   } 3>&1 | sed --file "${sdir}/sed/colored_http_code.sed" >&2
 }

@@ -23,7 +23,7 @@ orchestrator () {
     \command exec -c env -i BASH_ENV="$(CDPATH='' \command cd -- "$(dirname "${BASH_SOURCE[0]}")" &> /dev/null && \command printf '%s\n' "${PWD}")/src/utils.sh" bash --norc --noprofile "${BASH_SOURCE[0]}" "${@}" || exit 1
   fi
 
-  on errexit noclobber errtrace functrace nounset pipefail lastpipe
+  on errexit noclobber nounset pipefail lastpipe
 
   # TODO: use sdir
   global sdir old_ifs
@@ -33,12 +33,11 @@ orchestrator () {
 
   source "${sdir}/src/harden.sh"
 
-  harden base64
   #harden bc
   harden curl
   harden env
   harden git
-  harden jq
+  harden gojq
   #harden mktemp
   harden protoc
   harden sed

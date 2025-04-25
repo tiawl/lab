@@ -1,42 +1,44 @@
 #! /bin/sh
 
-not () { if ! "${@}"; then return 0; else return 1; fi; }
-eq () { if [ "${1}" == "${2}" ]; then return 0; else return 1; fi; }
-gt () { return "$(( ${1} > ${2} ? 0 : 1 ))"; }
-lt () { return "$(( ${1} < ${2} ? 0 : 1 ))"; }
-ge () { if not lt "${1}" "${2}"; then return 0; else return 1; fi; }
-le () { if not gt "${1}" "${2}"; then return 0; else return 1; fi; }
+not () { ! "${@}"; }
+eq () { (( "${1}" == "${2}" )); }
+gt () { (( "${1}" > "${2}" )); }
+lt () { (( "${1}" < "${2}" )); }
+ge () { not lt "${1}" "${2}"; }
+le () { not gt "${1}" "${2}"; }
 
 can () {
   case "${1}" in
-  ( 'not' ) if not can "${2}" "${3}"; then return 0; else return 1; fi ;;
-  ( 'exec' ) if [ -x "${2}" ]; then return "${n:-0}"; else return "$(( 1 - ${n:-0} ))"; fi ;;
+  ( 'not' ) shift; not can "${@}" ;;
+  ( 'exec' ) [ -x "${2}" ] ;;
   esac
 }
 
 is () {
   case "${1}" in
-  ( 'not' ) if not is "${2}" "${3}"; then return 0; else return 1; fi ;;
-  ( 'present' ) if [ -e "${2}" ]; then return 0; else return 1; fi ;;
-  ( 'file' ) if [ -f "${2}" ]; then return 0; else return 1; fi ;;
-  ( 'dir' ) if [ -d "${2}" ]; then return 0; else return 1; fi ;;
-  ( 'socket' ) if [ -S "${2}" ]; then return 0; else return 1; fi ;;
-  ( 'cmd') if is present "$(command -v "${2}" 2> /dev/null || :)"; then return 0; else return 1; fi ;;
+  ( 'not' ) shift; not is "${@}" ;;
+  ( 'present' ) [ -e "${2}" ] ;;
+  ( 'file' ) [ -f "${2}" ] ;;
+  ( 'dir' ) [ -d "${2}" ] ;;
+  ( 'socket' ) [ -S "${2}" ] ;;
+  ( 'cmd') is present "$(command -v "${2}" 2> /dev/null || :)" ;;
   # bash-only
   ( 'array' ) case "$(declare -p "${2}" 2> /dev/null)" in ( "declare -a ${2}" ) return 0 ;; ( * ) return 1 ;; esac ;;
   # bash-only
   ( 'map' ) case "$(declare -p "${2}" 2> /dev/null)" in ( "declare -A ${2}" ) return 0 ;; ( * ) return 1 ;; esac ;;
   # bash-only
-  ( 'func' ) if declare -F "${2}" > /dev/null; then return 0; else return 1; fi ;;
+  ( 'func' ) declare -F "${2}" > /dev/null ;;
   esac
 }
 
 str () {
   case "${1}" in
-  ( 'not' ) if not str "${2}" "${3}" "${4:-}"; then return 0; else return 1; fi ;;
-  ( 'empty' )  if [ -z "${2}" ]; then return 0; else return 1; fi ;;
+  ( 'not' ) shift; not str "${@}" ;;
+  ( 'empty' ) [ -z "${2}" ] ;;
+  ( 'eq' ) [ "${2}" == "${3}" ] ;;
   ( 'in' ) case "${3}" in ( *" ${2} "* ) return 0 ;; ( * ) return 1 ;; esac ;;
   ( 'starts' ) case "${2}" in ( "${3}"* ) return 0 ;; ( * ) return 1 ;; esac ;;
+  ( 'ends' ) case "${2}" in ( *"${3}" ) return 0 ;; ( * ) return 1 ;; esac ;;
   esac
 }
 
@@ -50,7 +52,7 @@ on () {
   while gt "${#}" 0
   do
     case "${1}" in
-    ( 'errexit'|'noclobber'|'errtrace'|'functrace'|'nounset'|'pipefail' ) shopt -o -s -q "${1}" ;;
+    ( 'errexit'|'noclobber'|'nounset'|'pipefail' ) shopt -o -s -q "${1}" ;;
     ( 'lastpipe'|'globstar' ) shopt -s -q "${1}" ;;
     ( * ) exit 1 ;;
     esac
@@ -63,7 +65,7 @@ off () {
   while gt "${#}" 0
   do
     case "${1}" in
-    ( 'errexit'|'noclobber'|'errtrace'|'functrace'|'nounset'|'pipefail' ) shopts -o -u -q "${1}" ;;
+    ( 'errexit'|'noclobber'|'nounset'|'pipefail' ) shopts -o -u -q "${1}" ;;
     ( 'lastpipe'|'globstar' ) shopt -u -q "${1}" ;;
     ( * ) exit 1 ;;
     esac
@@ -72,16 +74,19 @@ off () {
 }
 
 # bash-only
-trap_add () {
-  local stage
+defer () {
+  local stage fn prev_trap
   stage='0'
-  if is not func 'trap_exit_0'
+  fn="${FUNCNAME[*]}"
+  fn="${fn// /_}"
+  if is not func "__${fn}_0"
   then
-    trap -- 'trap_exit_0' EXIT
+    prev_trap="$(trap -p RETURN)"
+    trap -- "if str not eq \"\${FUNCNAME[0]}\" \"${FUNCNAME[0]}\"; then __${fn}_0; ${prev_trap:-trap - RETURN}; fi" RETURN
   fi
-  while is func "trap_exit_$(( ++stage ))"; do :; done
+  while is func "__${fn}_$(( ++stage ))"; do :; done
   (( stage-- ))
-  eval "trap_exit_${stage} () { ${*}; trap_exit_$(( stage + 1 )); }; trap_exit_$(( stage + 1 )) () { :; }"
+  eval "__${fn}_${stage} () { ${*}; __${fn}_$(( stage + 1 )); unset \"\${FUNCNAME[0]}\"; }; __${fn}_$(( stage + 1 )) () { unset \"\${FUNCNAME[0]}\"; }; declare -t -f __${fn}_${stage} __${fn}_$(( stage + 1 ))"
 }
 
 # TODO: how to make it works for setup.sh ?? bash-only

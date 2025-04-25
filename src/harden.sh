@@ -19,7 +19,7 @@ harden () {
   set +f
   IFS="${old_ifs}"
 
-  if not eq "${flag:-}" 'true'
+  if str not eq "${flag:-}" 'true'
   then
     printf 'This script needs "%s" but can not find it\n' "${1}" >&2
     return 1

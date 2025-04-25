@@ -67,7 +67,7 @@ main () (
     sudo apt-get install --assume-yes \
       coreutils \
       bc \
-      bash curl git jq openssh-client protobuf-compiler sed tar ;;
+      bash curl git gojq openssh-client protobuf-compiler sed tar ;;
   ( * )
     printf 'Unknown OS: %s\n' "${dist}" >&2
     return 1 ;;
@@ -87,7 +87,7 @@ main () (
   readonly daemon_json daemon_conf conf_dir etc etc_docker
 
   # copy docker daemon config and restart the Docker daemon
-  if is not present "${daemon_json}" || not jq --exit-status --null-input --argfile file1 "${daemon_json}" --argfile file2 "${daemon_conf}" '$file1 == $file2' > /dev/null
+  if is not present "${daemon_json}" || not gojq --exit-status --null-input --slurpfile file1 "${daemon_json}" --slurpfile file2 "${daemon_conf}" '$file1 == $file2' > /dev/null
   then
     sudo mkdir --parents "${etc_docker}"
     sudo cp --force "${daemon_conf}" "${daemon_json}"
@@ -99,7 +99,7 @@ main () (
     sudo cp "${sdir}/host/etc/ssh/ssh_config.d/accept-new.conf" /etc/ssh/ssh_config.d
   fi
 
-  # TODO: add systemd buildkitd socket
+  # TODO: add buildkitd socket
 )
 
 main "${@}"

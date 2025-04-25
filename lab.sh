@@ -21,7 +21,7 @@ lab () {
 
   # cleanup done: now it is time to define needed functions
 
-  on errexit noclobber errtrace functrace nounset pipefail lastpipe
+  on errexit noclobber nounset pipefail lastpipe
 
   global sdir old_ifs
   sdir="$(CDPATH='' cd -- "$(dirname "${BASH_SOURCE[0]}")" &> /dev/null && printf '%s' "${PWD}")"
@@ -105,13 +105,14 @@ lab () {
   readonly path
 
   orchestrator image build "${project[image]}bounce" "${sdir}/dockerfiles/bounce" "${#buildargs[@]}" "${!buildargs[@]}" "${buildargs[@]}"
+  # TODO: create a container only if it is not created
   orchestrator container create "${project[container]}bounce" "${project[image]}bounce" 'bounce'
-  trap_add orchestrator image builder cleanup
+  defer orchestrator image builder cleanup
   orchestrator container resource copy "${project[container]}bounce" "${path[BOUNCE_SSH_KEY]}" "${path[SSH_HOME]}"
   orchestrator container resource copy "${project[container]}bounce" "${path[BOUNCE_SSH_KEY]}.pub" "${path[SSH_HOME]}"
 
   orchestrator container start "${project[container]}bounce"
-  trap_add orchestrator container stop "${project[container]}bounce"
+  defer orchestrator container stop "${project[container]}bounce"
 
   local bounce_ip
   bounce_ip="$(orchestrator network ip get "${project[container]}bounce")"
@@ -121,7 +122,6 @@ lab () {
   ssh -i "${path[SSH_HOME]}/${buildargs[KEY_NAME]}" "${buildargs[USER]}@${bounce_ip}"
 
   # docker container rm -f lab.bounce; docker image prune --all -f; docker buildx prune -f; ./lab.sh
-  
 }
 
 lab "${@}"

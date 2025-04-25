@@ -10,6 +10,6 @@ image_builder_cleanup () {
 
   {
     curl --silent --fail --request "${method}" --unix-socket "${path[docker_socket]}" --write-out "%{stderr}%{scheme} %{response_code}\n" "${endpoint}" 2>&3 \
-      | jq '.' >&2
+      | gojq '.' >&2
   } 3>&1 | sed --file "${sdir}/sed/colored_http_code.sed" >&2
 }
