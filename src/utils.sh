@@ -4,8 +4,8 @@ not () { ! "${@}"; }
 eq () { (( "${1}" == "${2}" )); }
 gt () { (( "${1}" > "${2}" )); }
 lt () { (( "${1}" < "${2}" )); }
-ge () { not lt "${1}" "${2}"; }
-le () { not gt "${1}" "${2}"; }
+ge () { (( "${1}" >= "${2}" )); }
+le () { (( "${1}" <= "${2}" )); }
 
 can () {
   case "${1}" in
@@ -25,7 +25,7 @@ dirname () {
   set -- "${1:-.}"
   set -- "${1%%"${1##*[!/]}"}"
 
-  [ "${1##*/*}" ] && \command set -- '.'
+  [ "${1##*/*}" ] && set -- '.'
 
   set -- "${1%/*}"
   set -- "${1%%"${1##*[!/]}"}"
@@ -39,7 +39,6 @@ is () {
   ( 'file' ) [ -f "${2}" ] ;;
   ( 'dir' ) [ -d "${2}" ] ;;
   ( 'socket' ) [ -S "${2}" ] ;;
-  ( 'cmd') is present "$(command -v "${2}" 2> /dev/null || :)" ;;
   ( 'array' )
     if str not eq "$(basename "${BASH:-unknown}")" 'bash'; then return 1; fi
     case "$(declare -p "${2}" 2> /dev/null)" in ( "declare -a ${2}" ) return 0 ;; ( * ) return 1 ;; esac ;;
@@ -49,6 +48,13 @@ is () {
   ( 'func' )
     if str not eq "$(basename "${BASH:-unknown}")" 'bash'; then return 1; fi
     declare -F "${2}" > /dev/null ;;
+  esac
+}
+
+has () {
+  case "${1}" in
+  ( 'not' ) shift; not has "${@}" ;;
+  ( * ) can exec "$(command -v "${1}" 2> /dev/null || :)" ;;
   esac
 }
 
@@ -137,6 +143,26 @@ harden () {
     printf 'This script needs "%s" but can not find it\n' "${1}" >&2
     return 1
   fi
+}
+
+shuffle () {
+  if str not eq "$(basename "${BASH:-unknown}")" 'bash'; then return 1; fi
+  local i array_i size max rand
+  local -n array
+  array="${1}"
+  size="${#array[*]}"
+  max="$(( 32768 / size * size ))"
+  i="$(( size - 1 ))"
+
+  while gt "${i}" '0'
+  do
+    while [[ "$(( rand=${RANDOM} ))" -ge "${max}" ]]; do :; done
+    rand="$(( rand % (i+1) ))"
+    array_i="${array[i]}"
+    array[i]="${array[rand]}"
+    array[rand]="${array_i}"
+    (( i-- ))
+  done
 }
 
 bash_setup () {

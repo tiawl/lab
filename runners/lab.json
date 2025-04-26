@@ -1,0 +1,113 @@
+{
+  "run": [
+    {
+      "harden": "ssh"
+    },
+    {
+      "harden": "ssh-keygen"
+    },
+    {
+      "var": {
+        "name": "loc",
+        "type": "map"
+      }
+    },
+    {
+      "var": {
+        "name": "project",
+        "type": "map"
+      }
+    },
+    {
+      "set": {
+        "name": "loc",
+        "key": "image",
+        "value": "local${sep[image]}"
+      }
+    },
+    {
+      "set": {
+        "name": "project",
+        "key": "container",
+        "value": "${runner_name}${sep[container]}"
+      }
+    },
+    {
+      "set": {
+        "name": "project",
+        "key": "image",
+        "value": "${runner_name}${sep[image]}"
+      }
+    },
+    {
+      "set": {
+        "name": "version",
+        "key": "alpine",
+        "value": "3.21"
+      }
+    },
+    {
+      "readonly": "loc"
+    },
+    {
+      "readonly": "project"
+    },
+    {
+      "if": {
+        "not": {
+          "image": {
+            "tag": {
+              "defined": {
+                "image": "${loc[image]}alpine",
+                "tag": "${version[alpine]}"
+              }
+            }
+          }
+        }
+      },
+      "then": [
+        {
+          "image": {
+            "pull": {
+              "registry": "docker.io",
+              "library": "library",
+              "image": "alpine",
+              "tag": "${version[alpine]}"
+            }
+          }
+        },
+        {
+          "image": {
+            "prune": {
+              "matching": "${loc[image]}alpine${sep[tag]}*"
+            }
+          }
+        },
+        {
+          "image": {
+            "tag": {
+              "create": {
+                "from": {
+                  "image": "alpine",
+                  "tag": "${version[alpine]}"
+                },
+                "to": {
+                  "image": "${loc[image]}alpine",
+                  "tag": "${version[alpine]}"
+                }
+              }
+            }
+          }
+        },
+        {
+          "image": {
+            "remove": {
+              "image": "alpine",
+              "tag": "${version[alpine]}"
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

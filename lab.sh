@@ -25,15 +25,7 @@ lab () {
 
   bash_setup
 
-  global sdir
-  sdir="$(CDPATH='' cd -- "$(dirname "${BASH_SOURCE[0]}")" &> /dev/null && printf '%s' "${PWD}")"
-  readonly sdir
-
-  harden env
   harden id
-  #harden mktemp
-  harden ssh
-  harden ssh-keygen
 
   global usr uid home req_id
   usr="${USER:-"$(id --user --name)"}"
@@ -42,12 +34,9 @@ lab () {
   req_id='0'
   readonly usr uid home
 
-  global -A loc project
-  loc[image]="local${sep[image]}"
-  project[container]="lab${sep[container]}"
-  project[image]="lab${sep[image]}"
-  version[alpine]='3.21'
-  readonly loc project
+  global sdir
+  sdir="$(CDPATH='' cd -- "$(dirname "${BASH_SOURCE[0]}")" &> /dev/null && printf '%s' "${PWD}")"
+  readonly sdir
 
   global -a rainbow
   rainbow=( '21' '27' '33' '39' '45' '51' '50' '49' '48' '47' '46' '82' '118' '154' '190' '226' '220' '214' '208' '202' '196' '197' '198' '199' '200' '201' '165' '129' '93' '57' )
@@ -84,6 +73,17 @@ lab () {
     printf '%b\033[1m%s\033[0m > orchestrator %s\n' "\033[38;5;$(color)m" "$(( ++req_id ))" "${*}" >&2
     "${sdir}/bin/bdzr.sh" "${@}"
   }
+
+  #harden mktemp
+  harden ssh
+  harden ssh-keygen
+
+  global -A loc project
+  loc[image]="local${sep[image]}"
+  project[container]="lab${sep[container]}"
+  project[image]="lab${sep[image]}"
+  version[alpine]='3.21'
+  readonly loc project
 
   if not orchestrator image tag defined "${loc[image]}alpine" "${version[alpine]}"
   then

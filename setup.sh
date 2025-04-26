@@ -61,13 +61,30 @@ setup () (
 
   case "${dist}" in
   ( 'ubuntu'|'debian' )
-    sudo apt-get update --assume-yes
-    # coreutils: GNU-base64, GNU-env, GNU-mktemp, GNU-sha256sum, GNU-shuf and GNU-tee
-    # bc: currently not needed but it could be useful for potention evolution
-    sudo apt-get install --assume-yes \
-      coreutils \
-      bc \
-      bash curl git gojq openssh-client protobuf-compiler sed tar ;;
+    if has not base64 && \
+       has not env && \
+       has not mktemp && \
+       has not sha256sum && \
+       has not shuf && \
+       has not tee && \
+       has not bc && \
+       has not bash && \
+       has not curl && \
+       has not git && \
+       has not gojq && \
+       has not protoc && \
+       has not sed && \
+       has not tar
+    then
+      sudo apt-get update --assume-yes
+
+      # coreutils: GNU-base64, GNU-env, GNU-mktemp, GNU-sha256sum, GNU-shuf and GNU-tee
+      # bc: currently not needed but it could be useful for potention evolution
+      sudo apt-get install --assume-yes \
+        coreutils \
+        bc \
+        bash curl git gojq protobuf-compiler sed tar
+    fi ;;
   ( * )
     printf 'Unknown OS: %s\n' "${dist}" >&2
     return 1 ;;
