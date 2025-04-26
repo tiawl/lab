@@ -8,7 +8,7 @@ image_build () {
   }
 
   decode_buildkit_protobuf () {
-    protoc --decode=moby.buildkit.v1.StatusResponse --proto_path="${sdir}/protobuf" "${sdir}/protobuf/api/services/control/control.proto"
+    protoc --decode=moby.buildkit.v1.StatusResponse --descriptor_set_in=<(cat "${sdir}/buf/descriptor_sets/control.proto") --proto_path=/dev/fd <(cat "${sdir}/buf/vendor/api/services/control/control.proto")
   }
 
   local repo context buildargs_size json method tag logged_endpoint endpoint replace_me
@@ -55,7 +55,7 @@ image_build () {
                     | decode_buildkit_protobuf
                 } 3>&1 \
               | sed --file "${sdir}/sed/protobuf2json.sed" \
-              | gojq -L "${sdir}/jq" --raw-output --from-file "${sdir}/jq/image-build-logging.jq" --arg image "${repo}" >&2
+              | gojq --raw-output --from-file "${sdir}/jq/image-build-logging.jq" --arg image "${repo}" >&2
           done
     } 4>&1 | sed --file "${sdir}/sed/colored_http_code.sed" >&2
   fi

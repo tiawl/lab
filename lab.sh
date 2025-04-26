@@ -23,12 +23,9 @@ lab () {
 
   on errexit noclobber nounset pipefail lastpipe
 
-  global sdir old_ifs
+  global sdir
   sdir="$(CDPATH='' cd -- "$(dirname "${BASH_SOURCE[0]}")" &> /dev/null && printf '%s' "${PWD}")"
-  old_ifs="${IFS}"
-  readonly sdir old_ifs
-
-  source "${sdir}/src/harden.sh"
+  readonly sdir
 
   harden env
   harden id
@@ -83,7 +80,7 @@ lab () {
 
   orchestrator () {
     printf '%b\033[1m%s\033[0m > orchestrator %s\n' "\033[38;5;$(color)m" "$(( ++req_id ))" "${*}" >&2
-    "${sdir}/orchestrator.sh" "${@}"
+    bash "${sdir}/orchestrator.sh" "${@}"
   }
 
   if not orchestrator image tag defined "${loc[image]}alpine" "${version[alpine]}"

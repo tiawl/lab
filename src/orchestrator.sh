@@ -1,11 +1,5 @@
 #! /usr/bin/env bash
 
-version () {
-  version="$(git -C "${sdir}" describe --match *.*.* --tags --abbrev=9)"
-  version="${version%-*}"
-  printf '%s\n' "${version%\.*}.${version#*-}"
-}
-
 orchestrator () {
   dirname () {
     \command set -- "${1:-.}"
@@ -26,17 +20,13 @@ orchestrator () {
   on errexit noclobber nounset pipefail lastpipe
 
   # TODO: use sdir
-  global sdir old_ifs
+  global sdir
   sdir="$(CDPATH='' cd -- "$(dirname "${BASH_SOURCE[0]}")" &> /dev/null && printf '%s' "${PWD}")"
-  old_ifs="${IFS}"
-  readonly sdir old_ifs
-
-  source "${sdir}/src/harden.sh"
+  readonly sdir
 
   #harden bc
   harden curl
   harden env
-  harden git
   harden gojq
   #harden mktemp
   harden protoc

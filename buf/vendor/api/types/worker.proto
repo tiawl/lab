@@ -2,9 +2,9 @@ syntax = "proto3";
 
 package moby.buildkit.v1.types;
 
-option go_package = "api/types;moby_buildkit_v1_types";
+option go_package = "vendor/api/types;moby_buildkit_v1_types";
 
-import "solver/pb/ops.proto";
+import "vendor/solver/pb/ops.proto";
 
 message WorkerRecord {
 	string ID = 1;

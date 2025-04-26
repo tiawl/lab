@@ -1,6 +1,9 @@
 # !/usr/bin/env --split-string gojq --from-file
 
-import "module-color" as color;
+def esc_seq(code): "\u001B[" + code + "m";
+def fg(color): esc_seq("38;5;" + (color | tostring));
+def bold(text): esc_seq("1") + text;
+def color_text(text; color): fg(color) + text + esc_seq("0");
 
 def move_error_to_last_position:
   [
@@ -44,7 +47,7 @@ def move_error_to_last_position:
       .vertexes |
       if any(.[]; has("error"))
       then
-        ("image build " + $image + " > " + color::text("[ERROR] " + .[].error + "\n"; 1) | halt_error(1))
+        ("image build " + $image + " > " + color_text("[ERROR] " + .[].error + "\n"; 1) | halt_error(1))
       elif any(.[]; has("started")) and any(.[]; has("completed"))
       then
         (.[] | select(has("name")) | "image build " + $image + " > " + .name)
@@ -68,7 +71,7 @@ def move_error_to_last_position:
     (.logs[] | select(has("msg")) | "image build " + $image + " > " + (.msg | rtrimstr("\n")))
   elif has("warnings")
   then
-    (.warnings[] | select(has("short")) | "image build " + $image + " > " + color::text("[WARNING] " + .short; 3))
+    (.warnings[] | select(has("short")) | "image build " + $image + " > " + color_text("[WARNING] " + .short; 3))
   else
     ("protobuf2json: Unknown protobuf message type: " + keys[0] + "\n" | halt_error(1))
   end

@@ -1,6 +1,6 @@
 #! /bin/sh
 
-main () (
+setup () (
   # shell scripting: always consider the worst env
   # part 1: unalias everything
   \command set -e -u -x
@@ -100,6 +100,8 @@ main () (
   fi
 
   # TODO: add buildkitd socket
+
+  exec env -i SDIR="${sdir}" BASH_ENV="${sdir}/src/utils.sh" bash --norc --noprofile "${sdir}/compile.sh"
 )
 
-main "${@}"
+setup "${@}"

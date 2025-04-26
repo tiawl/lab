@@ -14,6 +14,13 @@ can () {
   esac
 }
 
+basename () {
+  set -- "${1%"${1##*[!/]}"}" "${2:-}"
+  set -- "${1##*/}" "${2:-}"
+  set -- "${1%"${2:-}"}"
+  printf '%s\n' "${1:-/}"
+}
+
 is () {
   case "${1}" in
   ( 'not' ) shift; not is "${@}" ;;
@@ -22,12 +29,15 @@ is () {
   ( 'dir' ) [ -d "${2}" ] ;;
   ( 'socket' ) [ -S "${2}" ] ;;
   ( 'cmd') is present "$(command -v "${2}" 2> /dev/null || :)" ;;
-  # bash-only
-  ( 'array' ) case "$(declare -p "${2}" 2> /dev/null)" in ( "declare -a ${2}" ) return 0 ;; ( * ) return 1 ;; esac ;;
-  # bash-only
-  ( 'map' ) case "$(declare -p "${2}" 2> /dev/null)" in ( "declare -A ${2}" ) return 0 ;; ( * ) return 1 ;; esac ;;
-  # bash-only
-  ( 'func' ) declare -F "${2}" > /dev/null ;;
+  ( 'array' )
+    if str not eq "$(basename "${BASH:-unknown}")" 'bash'; then return 1; fi
+    case "$(declare -p "${2}" 2> /dev/null)" in ( "declare -a ${2}" ) return 0 ;; ( * ) return 1 ;; esac ;;
+  ( 'map' )
+    if str not eq "$(basename "${BASH:-unknown}")" 'bash'; then return 1; fi
+    case "$(declare -p "${2}" 2> /dev/null)" in ( "declare -A ${2}" ) return 0 ;; ( * ) return 1 ;; esac ;;
+  ( 'func' )
+    if str not eq "$(basename "${BASH:-unknown}")" 'bash'; then return 1; fi
+    declare -F "${2}" > /dev/null ;;
   esac
 }
 
@@ -35,20 +45,20 @@ str () {
   case "${1}" in
   ( 'not' ) shift; not str "${@}" ;;
   ( 'empty' ) [ -z "${2}" ] ;;
-  ( 'eq' ) [ "${2}" == "${3}" ] ;;
+  ( 'eq' ) [ "${2}" = "${3}" ] ;;
   ( 'in' ) case "${3}" in ( *" ${2} "* ) return 0 ;; ( * ) return 1 ;; esac ;;
   ( 'starts' ) case "${2}" in ( "${3}"* ) return 0 ;; ( * ) return 1 ;; esac ;;
   ( 'ends' ) case "${2}" in ( *"${3}" ) return 0 ;; ( * ) return 1 ;; esac ;;
   esac
 }
 
-# bash-only
 global () {
+  if str not eq "$(basename "${BASH:-unknown}")" 'bash'; then return 1; fi
   declare -g "${@}"
 }
 
-# bash-only
 on () {
+  if str not eq "$(basename "${BASH:-unknown}")" 'bash'; then return 1; fi
   while gt "${#}" 0
   do
     case "${1}" in
@@ -60,12 +70,12 @@ on () {
   done
 }
 
-# bash-only
 off () {
+  if str not eq "$(basename "${BASH:-unknown}")" 'bash'; then return 1; fi
   while gt "${#}" 0
   do
     case "${1}" in
-    ( 'errexit'|'noclobber'|'nounset'|'pipefail' ) shopts -o -u -q "${1}" ;;
+    ( 'errexit'|'noclobber'|'nounset'|'pipefail' ) shopt -o -u -q "${1}" ;;
     ( 'lastpipe'|'globstar' ) shopt -u -q "${1}" ;;
     ( * ) exit 1 ;;
     esac
@@ -73,8 +83,8 @@ off () {
   done
 }
 
-# bash-only
 defer () {
+  if str not eq "$(basename "${BASH:-unknown}")" 'bash'; then return 1; fi
   local stage fn prev_trap
   stage='0'
   fn="${FUNCNAME[*]}"
@@ -89,11 +99,46 @@ defer () {
   eval "__${fn}_${stage} () { ${*}; __${fn}_$(( stage + 1 )); unset \"\${FUNCNAME[0]}\"; }; __${fn}_$(( stage + 1 )) () { unset \"\${FUNCNAME[0]}\"; }; declare -t -f __${fn}_${stage} __${fn}_$(( stage + 1 ))"
 }
 
-# TODO: how to make it works for setup.sh ?? bash-only
-global -A sep version path
-sep[image]='/'
-sep[tag]=':'
-sep[container]='.'
-version[docker_api]='v1.48'
-path[docker_socket]='/var/run/docker.sock'
-readonly sep
+# 1) fail if no external tool exists with the specified name
+# 2) wrap the external tool as a function
+harden () {
+  if str not eq "$(basename "${BASH:-unknown}")" 'bash'; then return 1; fi
+  local old_ifs dir flag
+  old_ifs="${IFS}"
+  readonly old_ifs
+
+  IFS=':'
+  set -f
+  for dir in ${PATH}
+  do
+    if can exec "${dir}/${1}"
+    then
+      eval "${1//-/_} () { ${dir}/${1} \"\${@}\"; }"
+      flag='true'
+      break
+    fi
+  done
+  set +f
+  IFS="${old_ifs}"
+
+  if str not eq "${flag:-}" 'true'
+  then
+    printf 'This script needs "%s" but can not find it\n' "${1}" >&2
+    return 1
+  fi
+}
+
+bash_env () {
+  if str eq "$(basename "${BASH:-unknown}")" 'bash'
+  then
+    global -A sep version path
+    sep[image]='/'
+    sep[tag]=':'
+    sep[container]='.'
+    version[docker_api]='v1.48'
+    path[docker_socket]='/var/run/docker.sock'
+    readonly sep
+  fi
+}
+
+bash_env

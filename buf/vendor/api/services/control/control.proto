@@ -2,14 +2,14 @@ syntax = "proto3";
 
 package moby.buildkit.v1;
 
-option go_package = "api/services/control;moby_buildkit_v1";
+option go_package = "vendor/api/services/control;moby_buildkit_v1";
 
 // import "github.com/containerd/containerd/api/types/descriptor.proto";
-import "api/types/worker.proto";
-import "solver/pb/ops.proto";
-import "sourcepolicy/pb/policy.proto";
-import "google/protobuf/timestamp.proto";
-import "google/rpc/status.proto";
+import "vendor/api/types/worker.proto";
+import "vendor/solver/pb/ops.proto";
+import "vendor/sourcepolicy/pb/policy.proto";
+import "vendor/google/protobuf/timestamp.proto";
+import "vendor/google/rpc/status.proto";
 
 service Control {
 	rpc DiskUsage(DiskUsageRequest) returns (DiskUsageResponse);
@@ -74,6 +74,7 @@ message SolveRequest {
 	bool Internal = 11; // Internal builds are not recorded in build history
 	moby.buildkit.v1.sourcepolicy.Policy SourcePolicy = 12;
 	repeated Exporter Exporters = 13;
+	bool EnableSessionExporter = 14;
 }
 
 message CacheOptions {
