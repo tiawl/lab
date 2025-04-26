@@ -23,6 +23,8 @@ lab () {
 
   on errexit noclobber nounset pipefail lastpipe
 
+  bash_setup
+
   global sdir
   sdir="$(CDPATH='' cd -- "$(dirname "${BASH_SOURCE[0]}")" &> /dev/null && printf '%s' "${PWD}")"
   readonly sdir
@@ -80,7 +82,7 @@ lab () {
 
   orchestrator () {
     printf '%b\033[1m%s\033[0m > orchestrator %s\n' "\033[38;5;$(color)m" "$(( ++req_id ))" "${*}" >&2
-    bash "${sdir}/orchestrator.sh" "${@}"
+    "${sdir}/bin/bdzr.sh" "${@}"
   }
 
   if not orchestrator image tag defined "${loc[image]}alpine" "${version[alpine]}"

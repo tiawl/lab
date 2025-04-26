@@ -14,6 +14,6 @@ network_ip_list () {
     {
       curl --silent --fail --request "${method}" --unix-socket "${path[docker_socket]}" --write-out "%{stderr}%{scheme} %{response_code}\n" "${endpoint}" 2>&3 \
         | gojq --raw-output '.Containers | to_entries[].value.IPv4Address | sub("/[0-9]+$"; "")' >&4
-    } 3>&1 4>&5 | sed --file "${sdir}/sed/colored_http_code.sed" >&2
+    } 3>&1 4>&5 | sed --file <(printf '%s' "${sed[colored_http_code]}") >&2
   } 5>&1
 }

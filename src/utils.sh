@@ -21,6 +21,17 @@ basename () {
   printf '%s\n' "${1:-/}"
 }
 
+dirname () {
+  set -- "${1:-.}"
+  set -- "${1%%"${1##*[!/]}"}"
+
+  [ "${1##*/*}" ] && \command set -- '.'
+
+  set -- "${1%/*}"
+  set -- "${1%%"${1##*[!/]}"}"
+  printf '%s\n' "${1:-/}"
+}
+
 is () {
   case "${1}" in
   ( 'not' ) shift; not is "${@}" ;;
@@ -128,7 +139,7 @@ harden () {
   fi
 }
 
-bash_env () {
+bash_setup () {
   if str eq "$(basename "${BASH:-unknown}")" 'bash'
   then
     global -A sep version path
@@ -140,5 +151,3 @@ bash_env () {
     readonly sep
   fi
 }
-
-bash_env

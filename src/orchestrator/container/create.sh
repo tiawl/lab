@@ -16,5 +16,5 @@ container_create () {
   {
     curl --silent --fail --request "${method}" --unix-socket "${path[docker_socket]}" --header 'Content-Type: application/json' --data "${json}" --write-out "%{stderr}%{scheme} %{response_code}\n" "${endpoint}" 2>&3 \
       | gojq '.' >&2
-  } 3>&1 | sed --file "${sdir}/sed/colored_http_code.sed" >&2
+  } 3>&1 | sed --file <(printf '%s' "${sed[colored_http_code]}") >&2
 }

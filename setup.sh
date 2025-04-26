@@ -62,7 +62,7 @@ setup () (
   case "${dist}" in
   ( 'ubuntu'|'debian' )
     sudo apt-get update --assume-yes
-    # coreutils: GNU-env, GNU-mktemp, GNU-sha256sum, GNU-shuf and GNU-tee
+    # coreutils: GNU-base64, GNU-env, GNU-mktemp, GNU-sha256sum, GNU-shuf and GNU-tee
     # bc: currently not needed but it could be useful for potention evolution
     sudo apt-get install --assume-yes \
       coreutils \

@@ -13,5 +13,5 @@ container_resource_copy () {
   {
     curl --silent --fail --request "${method}" --unix-socket "${path[docker_socket]}" --output - --write-out "%{stderr}%{scheme} %{response_code}\n" "${endpoint}" 2>&3 \
       | tar --extract --directory "${3}"
-  } 3>&1 | sed --file "${sdir}/sed/colored_http_code.sed" >&2
+  } 3>&1 | sed --file <(printf '%s' "${sed[colored_http_code]}") >&2
 }
