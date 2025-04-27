@@ -156,7 +156,7 @@ shuffle () {
 
   while gt "${i}" '0'
   do
-    while [[ "$(( rand=${RANDOM} ))" -ge "${max}" ]]; do :; done
+    while ge "$(( rand=${RANDOM} ))" "${max}"; do :; done
     rand="$(( rand % (i+1) ))"
     array_i="${array[i]}"
     array[i]="${array[rand]}"

@@ -1,5 +1,31 @@
 # !/usr/bin/env --split-string gojq --from-file
 
+def op: (
+  . |
+    if (type == "object") then (
+      if has("not") then (
+        (.not | op) |
+        {
+          bash: {
+            before: ("! { " + .bash.before),
+            after: (.bash.after + "; }")
+          },
+          json: .json
+        }
+      ) else (
+        {
+          bash: {
+            before: "",
+            after: ""
+          },
+          json: .
+        }
+      ) end
+    ) else (
+      "json2bash: Unknown type into op function: \"" + type + "\"\n" | halt_error(1)
+    ) end
+);
+
 def task_image_tag: (
   . | keys[0] +
     if has("defined") then (
@@ -26,26 +52,19 @@ def task_image: (
     ) end
 );
 
-def pretask(i; args): (
-  "  set -- \"$(( (" + (i | tostring) + " % 30) + 1 + 1 ))\" " + (args.positional | join(" ")) + "
-  printf '%b\\033[1m%s\\033[0m > %s\\n' \"\\033[38;5;${!1}m\" \"$(( ++req_id ))\" \"${*}\" >&2
-  set --\n" + .
+def pretask(i; args; prefix): (
+  prefix + "set -- " + ((i % 30) + 2 | tostring) + " " + (args.positional | join(" ")) + "; printf '%b\\033[1m%s\\033[0m > %s\\n' \"\\033[38;5;${!1}m\" \"$(( ++req_id ))\" \"${*}\" >&2; set --; " + .
 );
 
-def task(i; args; spaces): (
+def task(i; args; prefix): (
   . |
     if has("image") then (
-      {
-        output: (spaces + keys[0] + " " + (.image | task_image) | pretask(i; args)),
-        i: (i + 1)
-      }
+      keys[0] + " " + (.image | task_image) | pretask(i; args; prefix)
     ) else (
       "json2bash: Unknown task type: \"" + keys[0] + "\"\n" | halt_error(1)
     ) end
 );
 
-. as $dot |
-0 as $i |
 (input_filename | sub(".*/";"") | sub("\\.json$";"")) as $name |
 ("runner_" + $name) as $runner |
   $runner + " () {
@@ -64,34 +83,56 @@ def task(i; args; spaces): (
 
 " + (
   [
+    .__internal__.i = -1 |
+    . as $dot |
     $dot.run[] |
       if has("harden") then (
-        "  harden " + .harden
+        {
+          bash: ("  harden " + .harden),
+          internal: $dot.__internal__
+        }
       ) elif has("var") then (
-        .var as $var |
-          "  local " + (if $var.type == "map" then ("-A ")
-          elif $var.type == "array" then ("-a ")
-          elif $var.type == "string" then empty
-          else (
-            "runner exec: Unknown var.type: \"" + $var.type + "\"\n" | halt_error(1)
-          ) end) + $var.name
+        {
+          bash: (. as $var |
+            "  local " + (if $var.type == "map" then ("-A ")
+            elif $var.type == "array" then ("-a ")
+            elif $var.type == "string" then empty
+            else (
+              "runner exec: Unknown var.type: \"" + $var.type + "\"\n" | halt_error(1)
+            ) end) + $var.var),
+          internal: $dot.__internal__
+        }
       ) elif has("readonly") then (
-        "  readonly " + .readonly
+        {
+          bash: ("  readonly " + .readonly),
+          internal: $dot.__internal__
+        }
       ) elif has("set") then (
-        .set as $set |
-          "  " + $set.name + (if ($set | has("key")) then ("[" + $set.key + "]") else empty end) + "=\"" + $set.value + "\""
+        {
+          bash: (. as $set |
+            "  " + $set.set + (if ($set | has("key")) then ("[" + $set.key + "]") else empty end) + "=\"" + $set.value + "\""),
+          internal: $dot.__internal__
+        }
       ) elif has("if") and has("then") then (
         . as $conditional |
-          ($conditional.if |
-            if has("not") then (
-              .not | (task($i; $ARGS; "  if not ") as $task | $task.i as $i | $task.output)
-            ) else (
-              . | task($i; $ARGS; "  if ") as $task | $task.i as $i | $task.output
-            ) end) +
-          "\n  then\n" + ([$conditional.then[] | task($i; $ARGS; "    ") as $task | $task.i as $i | $task.output] | join("\n")) + "\n  fi"
+          ($conditional.if | op) as $op |
+          ($dot | setpath(["__internal__", "i"]; .__internal__.i + 1)) as $dot |
+          ($dot.__internal__.i) as $if_i |
+          ([foreach $conditional.then[] as $item ($dot; .__internal__.i += 1; [., . as $dot | $item | task($dot.__internal__.i; $ARGS; "    ")])]) as $arr |
+          ([$arr[][1]] | join("\n")) as $then |
+          ([$arr[][0]] | last) as $dot |
+          {
+            bash: ("  if " + (
+                $op.bash.before + ($op.json | task($if_i; $ARGS; "")) + $op.bash.after
+              ) + "\n  then\n" + $then + "\n  fi; "),
+            internal: $dot.__internal__
+          }
       ) else (
         "json2bash: Unknown json object type: \"" + keys[0] + "\"\n" | halt_error(1)
-      ) end
+      ) end |
+        . as $res |
+        ($dot | setpath(["__internal__"]; $res.internal)) as $dot |
+        $res.bash
   ] | join("\n")
 ) + "
 }
