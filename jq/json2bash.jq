@@ -50,7 +50,7 @@ def task_image(prefix): (
     ) elif has("prune") then (
       .prune as $prune | prefix + $key + " \"" + $prune.matching + "\""
     ) elif has("build") then (
-      .build as $build | (if $build.args | length > 0 then "local -A buildargs; buildargs=(" else "" end) + ([$build.args | to_entries[] | "[" + .key + "]=\"" + .value + "\""] | join(" ")) + (if $build.args | length > 0 then "); " else "" end) + prefix + $key + " \"" + $build.image + "\" \"" + $build.context + "\" \"${#buildargs[@]}\" \"${!buildargs[@]}\" \"${buildargs[@]}\"" + (if $build.args | length > 0 then "; unset buildargs" else "" end)
+      .build as $build | $build.args as $args | prefix + $key + " \"" + $build.image + "\" \"" + $build.context + "\" " + ($args | length | tostring) + " \"" + ($args | keys | join("\" \"")) + "\" \"" + ($args | values | join("\" \"")) + "\""
     ) else (
       "json2bash: Unknown image task type: \"" + $key + "\"\n" | halt_error(1)
     ) end
