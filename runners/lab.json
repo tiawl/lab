@@ -7,11 +7,11 @@
       "harden": "ssh-keygen"
     },
     {
-      "var": "loc",
+      "declare": "loc",
       "type": "map"
     },
     {
-      "var": "project",
+      "declare": "project",
       "type": "map"
     },
     {
@@ -96,6 +96,45 @@
           }
         }
       ]
+    },
+    {
+      "declare": "ssh_home",
+      "type": "string"
+    },
+    {
+      "set": "ssh_home",
+      "value": "/home/${buildargs[USER]}/.ssh"
+    },
+    {
+      "readonly": "ssh_home"
+    },
+    {
+      "image": {
+        "build": {
+          "image": "${project[image]}bounce",
+          "context": "./dockerfiles/bounce",
+          "args": {
+            "FROM": "${loc[image]}alpine${sep[tag]}${version[alpine]}",
+            "KEY_NAME": "host2lab",
+            "USER": "${usr}",
+            "SSH_HOME": "${ssh_home}",
+            "UID": "${uid}"
+          }
+        }
+      }
+    },
+    {
+      "set": "path",
+      "key": "bounce_ssh_key",
+      "value": "${buildargs[SSH_HOME]}/${buildargs[KEY_NAME]}"
+    },
+    {
+      "set": "path",
+      "key": "ssh_home",
+      "value": "${ssh_home}"
+    },
+    {
+      "readonly": "path"
     }
   ]
 }

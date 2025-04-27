@@ -26,42 +26,47 @@ def op: (
     ) end
 );
 
-def task_image_tag: (
-  . | keys[0] +
+def task_image_tag(prefix): (
+  . as $dot |
+  ($dot | keys[0]) as $key |
     if has("defined") then (
-      .defined as $defined | " \"" + $defined.image + "\" \"" + $defined.tag + "\""
+      .defined as $defined | prefix + $key + " \"" + $defined.image + "\" \"" + $defined.tag + "\""
     ) elif has("create") then (
-      .create as $create | " \"" + $create.from.image + "\" \"" + $create.from.tag + "\" \"" + $create.to.image + "\" \"" + $create.to.tag + "\""
+      .create as $create | prefix + $key + " \"" + $create.from.image + "\" \"" + $create.from.tag + "\" \"" + $create.to.image + "\" \"" + $create.to.tag + "\""
     ) else (
-      "json2bash: Unknown image tag task type: \"" + keys[0] + "\"\n" | halt_error(1)
+      "json2bash: Unknown image tag task type: \"" + $key + "\"\n" | halt_error(1)
     ) end
 );
 
-def task_image: (
-  . | keys[0] +
+def task_image(prefix): (
+  . as $dot |
+  ($dot | keys[0]) as $key |
     if has("tag") then (
-      " " + (.tag | task_image_tag)
+      .tag | task_image_tag(prefix + $key + " ")
     ) elif has("pull") then (
-      .pull as $pull | " \"" + $pull.registry + "\" \"" + $pull.library + "\" \"" + $pull.image + "\" \"" + $pull.tag + "\""
+      .pull as $pull | prefix + $key + " \"" + $pull.registry + "\" \"" + $pull.library + "\" \"" + $pull.image + "\" \"" + $pull.tag + "\""
     ) elif has("remove") then (
-      .remove as $remove | " \"" + $remove.image + "\" \"" + $remove.tag + "\""
+      .remove as $remove | prefix + $key + " \"" + $remove.image + "\" \"" + $remove.tag + "\""
     ) elif has("prune") then (
-      .prune as $prune | " \"" + $prune.matching + "\""
+      .prune as $prune | prefix + $key + " \"" + $prune.matching + "\""
+    ) elif has("build") then (
+      .build as $build | (if $build.args | length > 0 then "local -A buildargs; buildargs=(" else "" end) + ([$build.args | to_entries[] | "[" + .key + "]=\"" + .value + "\""] | join(" ")) + (if $build.args | length > 0 then "); " else "" end) + prefix + $key + " \"" + $build.image + "\" \"" + $build.context + "\" \"${#buildargs[@]}\" \"${!buildargs[@]}\" \"${buildargs[@]}\"" + (if $build.args | length > 0 then "; unset buildargs" else "" end)
     ) else (
-      "json2bash: Unknown image task type: \"" + keys[0] + "\"\n" | halt_error(1)
+      "json2bash: Unknown image task type: \"" + $key + "\"\n" | halt_error(1)
     ) end
 );
 
 def pretask(i; args; prefix): (
-  prefix + "set -- " + ((i % 30) + 2 | tostring) + " " + (args.positional | join(" ")) + "; printf '%b\\033[1m%s\\033[0m > %s\\n' \"\\033[38;5;${!1}m\" \"$(( ++req_id ))\" \"${*}\" >&2; set --; " + .
+  prefix + "printf '\\033[38;5;" + (args.positional[(i % 30) + 2]) + "m\\033[1m%s\\033[0m > %s\\n' \"$(( ++req_id ))\" \"${*}\" >&2; " + .
 );
 
 def task(i; args; prefix): (
-  . |
+  . as $dot |
+  ($dot | keys[0]) as $key |
     if has("image") then (
-      keys[0] + " " + (.image | task_image) | pretask(i; args; prefix)
+      .image | task_image($key + " ") | pretask(i; args; prefix)
     ) else (
-      "json2bash: Unknown task type: \"" + keys[0] + "\"\n" | halt_error(1)
+      "json2bash: Unknown task type: \"" + $key + "\"\n" | halt_error(1)
     ) end
 );
 
@@ -91,15 +96,15 @@ def task(i; args; prefix): (
           bash: ("  harden " + .harden),
           internal: $dot.__internal__
         }
-      ) elif has("var") then (
+      ) elif has("declare") then (
         {
-          bash: (. as $var |
-            "  local " + (if $var.type == "map" then ("-A ")
-            elif $var.type == "array" then ("-a ")
-            elif $var.type == "string" then empty
+          bash: (. as $decl |
+            "  local " + (if $decl.type == "map" then ("-A ")
+            elif $decl.type == "array" then ("-a ")
+            elif $decl.type == "string" then ""
             else (
-              "runner exec: Unknown var.type: \"" + $var.type + "\"\n" | halt_error(1)
-            ) end) + $var.var),
+              "runner exec: Unknown declare.type: \"" + $decl.type + "\"\n" | halt_error(1)
+            ) end) + $decl.declare),
           internal: $dot.__internal__
         }
       ) elif has("readonly") then (
@@ -110,7 +115,7 @@ def task(i; args; prefix): (
       ) elif has("set") then (
         {
           bash: (. as $set |
-            "  " + $set.set + (if ($set | has("key")) then ("[" + $set.key + "]") else empty end) + "=\"" + $set.value + "\""),
+            "  " + $set.set + (if ($set | has("key")) then ("[" + $set.key + "]") else "" end) + "=\"" + $set.value + "\""),
           internal: $dot.__internal__
         }
       ) elif has("if") and has("then") then (
@@ -128,7 +133,11 @@ def task(i; args; prefix): (
             internal: $dot.__internal__
           }
       ) else (
-        "json2bash: Unknown json object type: \"" + keys[0] + "\"\n" | halt_error(1)
+        ($dot | setpath(["__internal__", "i"]; .__internal__.i + 1)) as $dot |
+        {
+          bash: (. | task($dot.__internal__.i; $ARGS; "  ")),
+          internal: $dot.__internal__
+        }
       ) end |
         . as $res |
         ($dot | setpath(["__internal__"]; $res.internal)) as $dot |
