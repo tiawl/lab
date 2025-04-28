@@ -1,6 +1,6 @@
 #! /usr/bin/env bash
 
-container_resource_copy () {
+container_resource_copy () { #HELP <container_name> <container_path>\t\t\tCopy files/folders from a container to the local filesystem
   shift
 
   local endpoint method

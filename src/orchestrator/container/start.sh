@@ -1,6 +1,6 @@
 #! /usr/bin/env bash
 
-container_start () {
+container_start () { #HELP <container_name>\t\t\t\t\t\tStart stopped <container_name>
   shift
 
   local endpoint method

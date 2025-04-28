@@ -14,16 +14,24 @@ compile () {
   harden mkdir
   harden sed
 
-  local name version
+  local name version help
   name='bdzr'
   version="$(git -C "${SDIR}" describe --match *.*.* --tags --abbrev=9)"
   version="${version%-*}"
   version="${version%\.*}.${version#*-}"
-  readonly name version
+  help="$(on globstar
+    for src in "${SDIR}/src"/**/*
+    do
+      if is file "${src}"
+      then
+        sed -n 's/^\([a-zA-Z_][a-zA-Z0-9_]*\)\s*()\s*{\s*#HELP/\t\1\t/p' "${src}" | sed ':loop; s/^\(\t[^\t]*\)_/\1 /; t loop'
+      fi
+    done)"
+  readonly name version help
 
   mkdir -p "${SDIR}/bin"
   off noclobber
-  cat <<EOF > "${SDIR}/bin/${name}.sh"
+  cat <<EOF > "${SDIR}/bin/${name}"
 #! /usr/bin/env bash
 
 $(on globstar
@@ -37,11 +45,12 @@ $(on globstar
   done)
 
 version () {
-  printf '${version}\n'
+  printf '${name} ${version}\n' >&2
 }
 
 help () {
-  : TODO
+  version
+  printf '\nCOMMANDS:\n${help}\n' >&2
 }
 
 ${name} () {
@@ -81,7 +90,7 @@ $(on globstar
 
 ${name} "\${@}"
 EOF
-  chmod 0700 "${SDIR}/bin/${name}.sh"
+  chmod 0700 "${SDIR}/bin/${name}"
 }
 
 compile "${@}"

@@ -3,11 +3,14 @@ run:
       - literal: ssh
   - harden:
       - literal: ssh-keygen
-  - declare: loc
+  - assign:
+      - literal: loc
     type: map
-  - declare: project
+  - assign:
+      - literal: project
     type: map
-  - declare: loc
+  - assign:
+      - literal: loc
     key:
       - literal: image
     value:
@@ -15,7 +18,8 @@ run:
       - key:
           - literal: image
         var: sep
-  - declare: project
+  - assign:
+      - literal: project
     key:
       - literal: container
     value:
@@ -23,7 +27,8 @@ run:
       - key:
           - literal: container
         var: sep
-  - declare: project
+  - assign:
+      - literal: project
     key:
       - literal: image
     value:
@@ -31,7 +36,8 @@ run:
       - key:
           - literal: image
         var: sep
-  - declare: version
+  - assign:
+      - literal: version
     key:
       - literal: alpine
     value:
@@ -106,7 +112,8 @@ run:
               - key:
                   - literal: alpine
                 var: version
-  - declare: ssh_home
+  - assign:
+      - literal: ssh_home
     value:
       - literal: /home/
       - key:
@@ -154,7 +161,8 @@ run:
               - literal: image
             var: project
           - literal: bounce
-  - declare: path
+  - assign:
+      - literal: path
     key:
       - literal: bounce_ssh_key
     value:
@@ -165,7 +173,8 @@ run:
       - key:
           - literal: KEY_NAME
         var: buildargs
-  - declare: path
+  - assign:
+      - literal: path
     key:
       - literal: ssh_home
     value:

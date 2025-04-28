@@ -1,6 +1,6 @@
 #! /usr/bin/env bash
 
-runner_dry () {
+runner_dry () { #HELP <yaml_file>\t\t\t\t\t\t\tDisplay the runner bash script without executing it
   shift
 
   local rainbow

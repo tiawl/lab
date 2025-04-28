@@ -1,6 +1,6 @@
 #! /usr/bin/env bash
 
-image_tag_create () {
+image_tag_create () { #HELP <image_source> <tag_source> <new_image> <new_tag>\tCreate a tag <new_image>:<new_tag> that refers to\n\t\t\t\t\t\t\t\t\t\t\t<image_source>:<tag_source>
   shift
 
   local endpoint method

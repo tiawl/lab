@@ -1,6 +1,6 @@
 #! /usr/bin/env bash
 
-image_builder_cleanup () {
+image_builder_cleanup () { #HELP\t\t\t\t\t\t\tRemove build cache
   local endpoint method
   endpoint="http://${version[docker_api]}/build/prune?all=true"
   method='POST'

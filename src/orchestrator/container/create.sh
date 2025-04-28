@@ -1,6 +1,6 @@
 #! /usr/bin/env bash
 
-container_create () {
+container_create () { #HELP <container_name> <image> <container_hostname>\t\tCreate a new container from <image>
   shift
 
   local json endpoint logged_endpoint method img

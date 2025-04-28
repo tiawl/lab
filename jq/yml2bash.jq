@@ -132,19 +132,19 @@ def task(i; args; prefix): (
           bash: ("  harden " + (.harden | sanitize)),
           internal: $dot.__internal__
         }
-      ) elif has("declare") then (
+      ) elif has("assign") then (
         {
-          bash: (. as $decl |
-            "  local " + (if $decl.type == "map" then ("-A ")
-            elif $decl.type == "array" then ("-a ")
-            elif $decl.type == "ref" then "-n"
-            elif $decl.type == "string" or $decl.type == "" or $decl.type == null then ""
+          bash: (. as $assign |
+            "  local " + (if $assign.type == "map" then ("-A ")
+            elif $assign.type == "array" then ("-a ")
+            elif $assign.type == "ref" then "-n"
+            elif $assign.type == "string" or $assign.type == "" or $assign.type == null then ""
             else (
-              "runner exec: Unknown declare.type: \"" + $decl.type + "\"\n" | halt_error(1)
-            ) end) + "'" + $decl.declare + "'" + (
-              if ($decl | has("key")) then ("[" + ($decl.key | sanitize) + "]") else "" end
+              "runner exec: Unknown assign.type: \"" + $assign.type + "\"\n" | halt_error(1)
+            ) end) + ($assign.assign | sanitize) + (
+              if ($assign | has("key")) then ("[" + ($assign.key | sanitize) + "]") else "" end
             ) + (
-              if ($decl | has("value")) then ("=" + ($decl.value | sanitize) + "") else "" end)
+              if ($assign | has("value")) then ("=" + ($assign.value | sanitize) + "") else "" end)
             ),
           internal: $dot.__internal__
         }

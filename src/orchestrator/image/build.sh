@@ -1,6 +1,6 @@
 #! /usr/bin/env bash
 
-image_build () {
+image_build () { #HELP <repository> <context> [<nb_args> <args_keys> <args_values>]\tBuild an image from a Dockerfile
   shift
 
   filter_docker_output () {

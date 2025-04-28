@@ -1,6 +1,6 @@
 #! /usr/bin/env bash
 
-image_pull () {
+image_pull () { #HELP <registry> <project> <image> <tag>\t\t\t\tDownload <image> from <registry>
   shift
 
   local endpoint method img

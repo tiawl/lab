@@ -1,6 +1,6 @@
 #! /usr/bin/env bash
 
-network_ip_list () {
+network_ip_list () { #HELP <network>\t\t\t\t\t\t\tList all ip addresses used on <network>
   shift
 
   local endpoint method

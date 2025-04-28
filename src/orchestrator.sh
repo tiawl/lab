@@ -36,5 +36,8 @@ orchestrator () {
 
   # TODO: manage DOCKERD_HOST, BUILDKITD_HOST, CONTAINERD_HOST env vars
 
-  "${@}"
+  case "${1:-}" in
+  ( image|container|network|volume|runner ) "${@}" ;;
+  ( * ) help ;;
+  esac
 }

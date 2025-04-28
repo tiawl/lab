@@ -1,6 +1,6 @@
 #! /usr/bin/env bash
 
-image_list () {
+image_list () { #HELP <pattern>\t\t\t\t\t\t\tList images matching <pattern>
   shift
 
   local filters endpoint logged_endpoint method
