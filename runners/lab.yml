@@ -1,0 +1,174 @@
+run:
+  - harden:
+      - literal: ssh
+  - harden:
+      - literal: ssh-keygen
+  - declare: loc
+    type: map
+  - declare: project
+    type: map
+  - declare: loc
+    key:
+      - literal: image
+    value:
+      - literal: local
+      - key:
+          - literal: image
+        var: sep
+  - declare: project
+    key:
+      - literal: container
+    value:
+      - var: runner_name
+      - key:
+          - literal: container
+        var: sep
+  - declare: project
+    key:
+      - literal: image
+    value:
+      - var: runner_name
+      - key:
+          - literal: image
+        var: sep
+  - declare: version
+    key:
+      - literal: alpine
+    value:
+      - literal: "3.21"
+  - readonly:
+      - literal: loc
+  - readonly:
+      - literal: project
+  - if:
+      not:
+        image:
+          tag:
+            defined:
+              image:
+                - key:
+                    - literal: image
+                  var: loc
+                - literal: alpine
+              tag:
+                - key:
+                    - literal: alpine
+                  var: version
+    then:
+      - image:
+          pull:
+            image:
+              - literal: alpine
+            library:
+              - literal: library
+            registry:
+              - literal: docker.io
+            tag:
+              - key:
+                  - literal: alpine
+                var: version
+      - image:
+          prune:
+            matching:
+              - key:
+                  - literal: image
+                var: loc
+              - literal: alpine
+              - key:
+                  - literal: tag
+                var: sep
+              - literal: '*'
+      - image:
+          tag:
+            create:
+              from:
+                image:
+                  - literal: alpine
+                tag:
+                  - key:
+                      - literal: alpine
+                    var: version
+              to:
+                image:
+                  - key:
+                      - literal: image
+                    var: loc
+                  - literal: alpine
+                tag:
+                  - key:
+                      - literal: alpine
+                    var: version
+      - image:
+          remove:
+            image:
+              - literal: alpine
+            tag:
+              - key:
+                  - literal: alpine
+                var: version
+  - declare: ssh_home
+    value:
+      - literal: /home/
+      - key:
+          - literal: USER
+        var: buildargs
+      - literal: /.ssh
+  - readonly:
+      - literal: ssh_home
+  - image:
+      build:
+        args:
+          - key:
+              - literal: FROM
+            value:
+              - key:
+                  - literal: image
+                var: loc
+              - literal: alpine
+              - key:
+                  - literal: tag
+                var: sep
+              - key:
+                  - literal: alpine
+                var: version
+          - key:
+              - literal: KEY_NAME
+            value:
+              - literal: host2lab
+          - key:
+              - literal: USER
+            value:
+              - var: user
+          - key:
+              - literal: SSH_HOME
+            value:
+              - var: ssh_home
+          - key:
+              - literal: UID
+            value:
+              - var: uid
+        context:
+          - literal: ./dockerfiles/bounce
+        image:
+          - key:
+              - literal: image
+            var: project
+          - literal: bounce
+  - declare: path
+    key:
+      - literal: bounce_ssh_key
+    value:
+      - key:
+          - literal: SSH_HOME
+        var: buildargs
+      - literal: /
+      - key:
+          - literal: KEY_NAME
+        var: buildargs
+  - declare: path
+    key:
+      - literal: ssh_home
+    value:
+      - var: ssh_home
+  - readonly:
+      - literal: path

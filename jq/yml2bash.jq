@@ -1,5 +1,23 @@
 # !/usr/bin/env --split-string gojq --from-file
 
+def sanitize: (
+  [
+    .[] |
+      if has("literal") then (
+        "'" + .literal +  "'"
+      ) elif has("var") then (
+        . as $var |
+          if ($var.var | test("^[a-zA-Z_][a-zA-Z0-9_]*$")) then (
+            "\"${" + $var.var + (if ($var | has("key")) then ("[" + ($var.key | sanitize) + "]") else "" end) + "}\""
+          ) else (
+            "yml2bash: Bad variable name: \"" + $var.var + "\"\n" | halt_error(1)
+          ) end
+      ) else (
+        "yml2bash: Unknown object type: \"" + keys[0] + "\"\n" | halt_error(1)
+      ) end
+  ] | join("")
+);
+
 def op: (
   . |
     if (type == "object") then (
@@ -10,7 +28,7 @@ def op: (
             before: ("! { " + .bash.before),
             after: (.bash.after + "; }")
           },
-          json: .json
+          yml: .yml
         }
       ) else (
         {
@@ -18,11 +36,11 @@ def op: (
             before: "",
             after: ""
           },
-          json: .
+          yml: .
         }
       ) end
     ) else (
-      "json2bash: Unknown type into op function: \"" + type + "\"\n" | halt_error(1)
+      "yml2bash: Unknown type: \"" + type + "\"\n" | halt_error(1)
     ) end
 );
 
@@ -30,11 +48,17 @@ def task_image_tag(prefix): (
   . as $dot |
   ($dot | keys[0]) as $key |
     if has("defined") then (
-      .defined as $defined | prefix + $key + " \"" + $defined.image + "\" \"" + $defined.tag + "\""
+      .defined as $defined | prefix + $key + " " +
+        ($defined.image | sanitize) + " " +
+        ($defined.tag | sanitize)
     ) elif has("create") then (
-      .create as $create | prefix + $key + " \"" + $create.from.image + "\" \"" + $create.from.tag + "\" \"" + $create.to.image + "\" \"" + $create.to.tag + "\""
+      .create as $create | prefix + $key + " " +
+        ($create.from.image | sanitize) + " " +
+        ($create.from.tag | sanitize) + " " +
+        ($create.to.image | sanitize) + " " +
+        ($create.to.tag | sanitize)
     ) else (
-      "json2bash: Unknown image tag task type: \"" + $key + "\"\n" | halt_error(1)
+      "yml2bash: Unknown image tag task type: \"" + $key + "\"\n" | halt_error(1)
     ) end
 );
 
@@ -44,15 +68,27 @@ def task_image(prefix): (
     if has("tag") then (
       .tag | task_image_tag(prefix + $key + " ")
     ) elif has("pull") then (
-      .pull as $pull | prefix + $key + " \"" + $pull.registry + "\" \"" + $pull.library + "\" \"" + $pull.image + "\" \"" + $pull.tag + "\""
+      .pull as $pull | prefix + $key + " " +
+        ($pull.registry | sanitize) + " " +
+        ($pull.library | sanitize) + " " +
+        ($pull.image | sanitize) + " " +
+        ($pull.tag | sanitize)
     ) elif has("remove") then (
-      .remove as $remove | prefix + $key + " \"" + $remove.image + "\" \"" + $remove.tag + "\""
+      .remove as $remove | prefix + $key + " " +
+        ($remove.image | sanitize) + " " +
+        ($remove.tag | sanitize)
     ) elif has("prune") then (
-      .prune as $prune | prefix + $key + " \"" + $prune.matching + "\""
+      .prune as $prune | prefix + $key + " " +
+        ($prune.matching | sanitize)
     ) elif has("build") then (
-      .build as $build | $build.args as $args | prefix + $key + " \"" + $build.image + "\" \"" + $build.context + "\" " + ($args | length | tostring) + " \"" + ($args | keys | join("\" \"")) + "\" \"" + ($args | values | join("\" \"")) + "\""
+      .build as $build | prefix + $key + " " +
+        ($build.image | sanitize) + " " +
+        ($build.context | sanitize) + " " +
+        ($build.args | length | tostring) + " " +
+        ([$build.args[].key | sanitize] | join(" ")) + " " +
+        ([$build.args[].value | sanitize] | join(" "))
     ) else (
-      "json2bash: Unknown image task type: \"" + $key + "\"\n" | halt_error(1)
+      "yml2bash: Unknown image task type: \"" + $key + "\"\n" | halt_error(1)
     ) end
 );
 
@@ -66,11 +102,11 @@ def task(i; args; prefix): (
     if has("image") then (
       .image | task_image($key + " ") | pretask(i; args; prefix)
     ) else (
-      "json2bash: Unknown task type: \"" + $key + "\"\n" | halt_error(1)
+      "yml2bash: Unknown task type: \"" + $key + "\"\n" | halt_error(1)
     ) end
 );
 
-(input_filename | sub(".*/";"") | sub("\\.json$";"")) as $name |
+(input_filename | sub(".*/";"") | sub("\\.yml$";"")) as $name |
 ("runner_" + $name) as $runner |
   $runner + " () {
   on errexit noclobber nounset pipefail lastpipe
@@ -93,7 +129,7 @@ def task(i; args; prefix): (
     $dot.run[] |
       if has("harden") then (
         {
-          bash: ("  harden " + .harden),
+          bash: ("  harden " + (.harden | sanitize)),
           internal: $dot.__internal__
         }
       ) elif has("declare") then (
@@ -101,21 +137,20 @@ def task(i; args; prefix): (
           bash: (. as $decl |
             "  local " + (if $decl.type == "map" then ("-A ")
             elif $decl.type == "array" then ("-a ")
-            elif $decl.type == "string" then ""
+            elif $decl.type == "ref" then "-n"
+            elif $decl.type == "string" or $decl.type == "" or $decl.type == null then ""
             else (
               "runner exec: Unknown declare.type: \"" + $decl.type + "\"\n" | halt_error(1)
-            ) end) + $decl.declare),
+            ) end) + "'" + $decl.declare + "'" + (
+              if ($decl | has("key")) then ("[" + ($decl.key | sanitize) + "]") else "" end
+            ) + (
+              if ($decl | has("value")) then ("=" + ($decl.value | sanitize) + "") else "" end)
+            ),
           internal: $dot.__internal__
         }
       ) elif has("readonly") then (
         {
-          bash: ("  readonly " + .readonly),
-          internal: $dot.__internal__
-        }
-      ) elif has("set") then (
-        {
-          bash: (. as $set |
-            "  " + $set.set + (if ($set | has("key")) then ("[" + $set.key + "]") else "" end) + "=\"" + $set.value + "\""),
+          bash: ("  readonly " + (.readonly | sanitize)),
           internal: $dot.__internal__
         }
       ) elif has("if") and has("then") then (
@@ -128,7 +163,7 @@ def task(i; args; prefix): (
           ([$arr[][0]] | last) as $dot |
           {
             bash: ("  if " + (
-                $op.bash.before + ($op.json | task($if_i; $ARGS; "")) + $op.bash.after
+                $op.bash.before + ($op.yml | task($if_i; $ARGS; "")) + $op.bash.after
               ) + "\n  then\n" + $then + "\n  fi; "),
             internal: $dot.__internal__
           }
@@ -146,4 +181,4 @@ def task(i; args; prefix): (
 ) + "
 }
 
-" + $runner
+" + $runner + " \"${@}\""
