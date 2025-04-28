@@ -181,3 +181,21 @@ run:
       - var: ssh_home
   - readonly:
       - literal: path
+  - container:
+      create:
+        name:
+          - var: project
+            key:
+              - literal: container
+          - literal: bounce
+        image:
+          - var: project
+            key:
+              - literal: image
+          - literal: bounce
+        hostname:
+          - literal: bounce
+  - defer:
+      image:
+        builder:
+          prune: null

@@ -1,5 +1,18 @@
 # !/usr/bin/env --split-string gojq --from-file
 
+# TODO:
+# - defer
+# - command
+# - register
+# - op:
+#   - and
+#   - or
+#   - [[ ]]
+# - arith
+# - while/for loops
+# - recursive if/while/for
+# - functions
+
 def sanitize: (
   [
     .[] |
@@ -44,9 +57,19 @@ def op: (
     ) end
 );
 
+def task_image_builder(prefix): (
+  . as $builder |
+  ($builder | keys[0]) as $key |
+    if has("prune") then (
+      .prune as $prune | prefix + $key + " prune"
+    ) else (
+      "yml2bash: Unknown image builder task type: \"" + $key + "\"\n" | halt_error(1)
+    ) end
+);
+
 def task_image_tag(prefix): (
-  . as $dot |
-  ($dot | keys[0]) as $key |
+  . as $tag |
+  ($tag | keys[0]) as $key |
     if has("defined") then (
       .defined as $defined | prefix + $key + " " +
         ($defined.image | sanitize) + " " +
@@ -63,10 +86,12 @@ def task_image_tag(prefix): (
 );
 
 def task_image(prefix): (
-  . as $dot |
-  ($dot | keys[0]) as $key |
+  . as $image |
+  ($image | keys[0]) as $key |
     if has("tag") then (
       .tag | task_image_tag(prefix + $key + " ")
+    ) elif has("builder") then (
+      .builder | task_image_builder(prefix + $key + " ")
     ) elif has("pull") then (
       .pull as $pull | prefix + $key + " " +
         ($pull.registry | sanitize) + " " +
@@ -92,18 +117,33 @@ def task_image(prefix): (
     ) end
 );
 
+def task_container(prefix): (
+  . as $container |
+  ($container | keys[0]) as $key |
+    if has("create") then (
+      .create as $create | prefix + $key + " " +
+        ($create.name | sanitize) + " " +
+        ($create.image | sanitize) + " " +
+        ($create.hostname | sanitize)
+    ) else (
+      "yml2bash: Unknown container task type: \"" + $key + "\"\n" | halt_error(1)
+    ) end
+);
+
 def pretask(i; args; prefix): (
-  prefix + "printf '\\033[38;5;" + (args.positional[(i % 30) + 2]) + "m\\033[1m%s\\033[0m > %s\\n' \"$(( ++req_id ))\" \"${*}\" >&2; " + .
+  prefix + "printf '\\033[38;5;" + (args.positional[(i % 30) + 2]) + "m\\033[1m" + (i + 1 | tostring) + "\\033[0m > %s\\n' \"" + (. | gsub("\"|'"; "") ) + "\" >&2; " + .
 );
 
 def task(i; args; prefix): (
-  . as $dot |
-  ($dot | keys[0]) as $key |
+  . as $task |
+  ($task | keys[0]) as $key |
     if has("image") then (
-      .image | task_image($key + " ") | pretask(i; args; prefix)
+      .image | task_image($key + " ")
+    ) elif has("container") then (
+      .container | task_container($key + " ")
     ) else (
       "yml2bash: Unknown task type: \"" + $key + "\"\n" | halt_error(1)
-    ) end
+    ) end | pretask(i; args; prefix)
 );
 
 (input_filename | sub(".*/";"") | sub("\\.yml$";"")) as $name |
@@ -125,12 +165,12 @@ def task(i; args; prefix): (
 " + (
   [
     .__internal__.i = -1 |
-    . as $dot |
-    $dot.run[] |
+    . as $root |
+    $root.run[] |
       if has("harden") then (
         {
           bash: ("  harden " + (.harden | sanitize)),
-          internal: $dot.__internal__
+          internal: $root.__internal__
         }
       ) elif has("assign") then (
         {
@@ -146,36 +186,42 @@ def task(i; args; prefix): (
             ) + (
               if ($assign | has("value")) then ("=" + ($assign.value | sanitize) + "") else "" end)
             ),
-          internal: $dot.__internal__
+          internal: $root.__internal__
         }
       ) elif has("readonly") then (
         {
           bash: ("  readonly " + (.readonly | sanitize)),
-          internal: $dot.__internal__
+          internal: $root.__internal__
         }
       ) elif has("if") and has("then") then (
         . as $conditional |
           ($conditional.if | op) as $op |
-          ($dot | setpath(["__internal__", "i"]; .__internal__.i + 1)) as $dot |
-          ($dot.__internal__.i) as $if_i |
-          ([foreach $conditional.then[] as $item ($dot; .__internal__.i += 1; [., . as $dot | $item | task($dot.__internal__.i; $ARGS; "    ")])]) as $arr |
-          ([$arr[][1]] | join("\n")) as $then |
-          ([$arr[][0]] | last) as $dot |
+          ($root | setpath(["__internal__", "i"]; .__internal__.i + 1)) as $root |
+          ($root.__internal__.i) as $if_i |
+          ([foreach $conditional.then[] as $item ($root; .__internal__.i += 1; [., . as $root | $item | task($root.__internal__.i; $ARGS; "    ")])]) as $then_root |
+          ([$then_root[][1]] | join("\n")) as $then |
+          ([$then_root[][0]] | last) as $root |
           {
             bash: ("  if " + (
                 $op.bash.before + ($op.yml | task($if_i; $ARGS; "")) + $op.bash.after
               ) + "\n  then\n" + $then + "\n  fi; "),
-            internal: $dot.__internal__
+            internal: $root.__internal__
           }
-      ) else (
-        ($dot | setpath(["__internal__", "i"]; .__internal__.i + 1)) as $dot |
+      ) elif has("defer") then (
+        ($root | setpath(["__internal__", "i"]; .__internal__.i + 1)) as $root |
         {
-          bash: (. | task($dot.__internal__.i; $ARGS; "  ")),
-          internal: $dot.__internal__
+          bash: ("  " + (.defer | task($root.__internal__.i; $ARGS; ""))),
+          internal: $root.__internal__
+        }
+      ) else (
+        ($root | setpath(["__internal__", "i"]; .__internal__.i + 1)) as $root |
+        {
+          bash: (. | task($root.__internal__.i; $ARGS; "  ")),
+          internal: $root.__internal__
         }
       ) end |
         . as $res |
-        ($dot | setpath(["__internal__"]; $res.internal)) as $dot |
+        ($root | setpath(["__internal__"]; $res.internal)) as $root |
         $res.bash
   ] | join("\n")
 ) + "
