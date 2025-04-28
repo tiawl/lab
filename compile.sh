@@ -12,10 +12,11 @@ compile () {
   harden cat
   harden git
   harden mkdir
+  harden rm
   harden sed
 
   local name version help
-  name='bdzr'
+  name='piplop'
   version="$(git -C "${SDIR}" describe --match *.*.* --tags --abbrev=9)"
   version="${version%-*}"
   version="${version%\.*}.${version#*-}"
@@ -29,6 +30,7 @@ compile () {
     done)"
   readonly name version help
 
+  rm -rf "${SDIR}/bin"
   mkdir -p "${SDIR}/bin"
   off noclobber
   cat <<EOF > "${SDIR}/bin/${name}"

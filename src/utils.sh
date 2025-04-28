@@ -78,11 +78,11 @@ on () {
   if str not eq "$(basename "${BASH:-unknown}")" 'bash'; then return 1; fi
   while gt "${#}" 0
   do
-    case "${1}" in
-    ( 'errexit'|'noclobber'|'nounset'|'pipefail' ) shopt -o -s -q "${1}" ;;
-    ( 'lastpipe'|'globstar' ) shopt -s -q "${1}" ;;
-    ( * ) exit 1 ;;
-    esac
+    if not set -o "${1}" 2> /dev/null
+    then
+      compgen -A shopt -X \!"${1}" "${1}" > /dev/null
+      shopt -s -q "${1}"
+    fi
     shift
   done
 }
@@ -91,11 +91,11 @@ off () {
   if str not eq "$(basename "${BASH:-unknown}")" 'bash'; then return 1; fi
   while gt "${#}" 0
   do
-    case "${1}" in
-    ( 'errexit'|'noclobber'|'nounset'|'pipefail' ) shopt -o -u -q "${1}" ;;
-    ( 'lastpipe'|'globstar' ) shopt -u -q "${1}" ;;
-    ( * ) exit 1 ;;
-    esac
+    if not set +o "${1}" 2> /dev/null
+    then
+      compgen -A shopt -X \!"${1}" "${1}" > /dev/null
+      shopt -u -q "${1}"
+    fi
     shift
   done
 }

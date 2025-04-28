@@ -3,7 +3,7 @@
 image_builder () {
   shift
   case "${1}" in
-  ( 'cleanup' ) image_builder_cleanup ;;
+  ( 'prune' ) image_builder_prune ;;
   ( * ) return 1 ;;
   esac
 }

@@ -1,6 +1,6 @@
 #! /usr/bin/env bash
 
-image_build () { #HELP <repository> <context> [<nb_args> <args_keys> <args_values>]\tBuild an image from a Dockerfile
+image_build () { #HELP <repository> <context> [<key> <value>] [<key> <value>] [...]\tBuild an image from a Dockerfile
   shift
 
   filter_docker_output () {
@@ -11,20 +11,19 @@ image_build () { #HELP <repository> <context> [<nb_args> <args_keys> <args_value
     protoc --decode=moby.buildkit.v1.StatusResponse --descriptor_set_in=<(printf '%s' "${buf[descriptor_set_control]}" | base64 -d) --proto_path=/dev/fd <(printf '%s' "${buf[vendor_control]}")
   }
 
-  local repo context buildargs_size json method tag logged_endpoint endpoint replace_me
+  local repo context json method tag logged_endpoint endpoint replace_me
   repo="${1}"
   context="${2}"
-  buildargs_size="${3}"
   method='POST'
   replace_me='XXXXXXXXXX'
-  readonly repo context buildargs_size method replace_me
+  readonly repo context method replace_me
 
   shift 3
 
   local -a curl_cmd
   curl_cmd=('curl' '--silent' '--fail' '--request' "${method}" '--unix-socket' "${path[docker_socket]}" '--data-binary' '@-' '--header' 'Content-Type: application/x-tar' '--no-buffer' '--write-out' "%{stderr}%{scheme} %{response_code}\n")
 
-  json="$(gojq --monochrome-output --null-input --compact-output '$ARGS.positional | [.[:$n], .[$n:]] | transpose | map({ (first): last }) | add' --argjson n "${buildargs_size}" --args "${@}")"
+  json="$(gojq --monochrome-output --null-input --compact-output '[$ARGS.positional | range(length/2|ceil) as $i | .[2 * $i:2 * $i + 2] | {(first): last}] | add' --args "${@:3}")"
   endpoint="http://${version[docker_api]}/build?version=2&t=${repo}${sep[tag]}${replace_me}&buildargs="
   logged_endpoint="${endpoint}${json}"
   tag="$({
