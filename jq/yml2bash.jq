@@ -8,8 +8,8 @@
 #   - or
 #   - [[ ]]
 # - arith
-# - while/for loops
-# - recursive if/while/for
+# - while/for/case
+# - recursive if/while/for/case
 # - functions
 # - on/off
 
@@ -23,10 +23,10 @@ def sanitize: (
           if ($var.var | test("^[a-zA-Z_][a-zA-Z0-9_]*$")) then (
             "\"${" + $var.var + (if ($var | has("key")) then ("[" + ($var.key | sanitize) + "]") else "" end) + "}\""
           ) else (
-            "yml2bash: Bad variable name: \"" + $var.var + "\"\n" | halt_error(1)
+            "runner: Bad variable name: \"" + $var.var + "\"\n" | halt_error(1)
           ) end
       ) else (
-        "yml2bash: Unknown object type: \"" + keys[0] + "\"\n" | halt_error(1)
+        "runner: Unknown object type: \"" + keys[0] + "\"\n" | halt_error(1)
       ) end
   ] | join("")
 );
@@ -53,7 +53,7 @@ def op: (
         }
       ) end
     ) else (
-      "yml2bash: Unknown type: \"" + type + "\"\n" | halt_error(1)
+      "runner: Unknown type: \"" + type + "\"\n" | halt_error(1)
     ) end
 );
 
@@ -63,7 +63,7 @@ def task_image_builder(prefix): (
     if has("prune") then (
       .prune as $prune | prefix + $key + " prune"
     ) else (
-      "yml2bash: Unknown image builder task type: \"" + $key + "\"\n" | halt_error(1)
+      "runner: Unknown image builder task type: \"" + $key + "\"\n" | halt_error(1)
     ) end
 );
 
@@ -81,7 +81,7 @@ def task_image_tag(prefix): (
         ($create.to.image | sanitize) + " " +
         ($create.to.tag | sanitize)
     ) else (
-      "yml2bash: Unknown image tag task type: \"" + $key + "\"\n" | halt_error(1)
+      "runner: Unknown image tag task type: \"" + $key + "\"\n" | halt_error(1)
     ) end
 );
 
@@ -113,7 +113,7 @@ def task_image(prefix): (
         ([$build.args[].key | sanitize] | join(" ")) + " " +
         ([$build.args[].value | sanitize] | join(" "))
     ) else (
-      "yml2bash: Unknown image task type: \"" + $key + "\"\n" | halt_error(1)
+      "runner: Unknown image task type: \"" + $key + "\"\n" | halt_error(1)
     ) end
 );
 
@@ -126,7 +126,7 @@ def task_container_resource(prefix): (
       ($copy.src | sanitize) + " " +
       ($copy.dest | sanitize)
     ) else (
-      "yml2bash: Unknown container resource task type: \"" + $key + "\"\n" | halt_error(1)
+      "runner: Unknown container resource task type: \"" + $key + "\"\n" | halt_error(1)
     ) end
 );
 
@@ -141,7 +141,7 @@ def task_container(prefix): (
         ($create.image | sanitize) + " " +
         ($create.hostname | sanitize)
     ) else (
-      "yml2bash: Unknown container task type: \"" + $key + "\"\n" | halt_error(1)
+      "runner: Unknown container task type: \"" + $key + "\"\n" | halt_error(1)
     ) end
 );
 
@@ -154,16 +154,66 @@ def pretask(i; args; prefix): (
 
 def task(i; args; prefix): (
   . as $task |
-  ($task | keys[0]) as $key |
+  if $task | isempty(.[]) then (
+    []
+  ) else (
+    ($task | keys[0]) as $key |
+    [
+      if has("image") then (
+        .image | task_image($key + " ")
+      ) elif has("container") then (
+        .container | task_container($key + " ")
+      ) else (
+        "runner: Unknown task type: \"" + $key + "\"\n" | halt_error(1)
+      ) end
+    ] | pretask(i; args; prefix)
+  ) end
+);
+
+def conditional_inner(root; args): (
+  if (.then | type != "array") then ("runner: Conditional \"then\" field must an array type but it is \"" + (.then | type) + "\"\n" | halt_error(1)) else . end |
+  . as $inner |
+  if ($inner | ((. | type == "object") and (. | keys | length == 1) and (. | keys[0] == "then"))) then (
+    {
+      op: {
+        bash: {
+          before: "",
+          after: ""
+        },
+        yml: {}
+      },
+      root: root
+    }
+  ) else (
+    {
+      op: ($inner | op),
+      root: (root | setpath(["__internal__", "i"]; .__internal__.i + 1))
+    }
+  ) end | . as $op_root | $op_root.op as $op | $op_root.root as $root |
+  ($root.__internal__.i) as $cond_i |
+  ([
+    foreach ($inner | .then[]) as $item ({root: $root}; .root.__internal__.i += 1; . as $dot | . + {then: ($item | task($dot.root.__internal__.i; args; "    ") | join("\n    "))})
+  ]) |
+    {
+      cond: ($op.bash.before + ($op.yml | task($cond_i; args; "") | join("; ")) + $op.bash.after),
+      then: ([.[].then] | join("\n")),
+      root: ([.[].root] | last)
+    }
+);
+
+def conditional(root; args): (
+  . as $conditional |
+  ($conditional.if | conditional_inner(root; args) | .) as $first |
   [
-    if has("image") then (
-      .image | task_image($key + " ")
-    ) elif has("container") then (
-      .container | task_container($key + " ")
+    $first
+  ] as $return |
+    $conditional | if has("else") then (
+      $return + [
+        foreach $conditional.else[] as $item ({root: $first.root}; . as $dot | $item | conditional_inner($dot.root; args); .)
+      ]
     ) else (
-      "yml2bash: Unknown task type: \"" + $key + "\"\n" | halt_error(1)
-    ) end
-  ] | pretask(i; args; prefix)
+      $return
+    ) end | . as $return | $return
 );
 
 (input_filename | sub(".*/";"") | sub("\\.yml$";"")) as $name |
@@ -200,7 +250,7 @@ def task(i; args; prefix): (
             elif $assign.type == "ref" then "-n"
             elif $assign.type == "string" or $assign.type == "" or $assign.type == null then ""
             else (
-              "runner exec: Unknown assign.type: \"" + $assign.type + "\"\n" | halt_error(1)
+              "runner: Unknown assign.type: \"" + $assign.type + "\"\n" | halt_error(1)
             ) end) + ($assign.assign | sanitize) + (
               if ($assign | has("key")) then ("[" + ($assign.key | sanitize) + "]") else "" end
             ) + (
@@ -213,19 +263,11 @@ def task(i; args; prefix): (
           bash: ("  readonly " + (.readonly | sanitize)),
           internal: $root.__internal__
         }
-      ) elif has("if") and has("then") then (
-        . as $conditional |
-          ($conditional.if | op) as $op |
-          ($root | setpath(["__internal__", "i"]; .__internal__.i + 1)) as $root |
-          ($root.__internal__.i) as $if_i |
-          ([foreach $conditional.then[] as $item ($root; .__internal__.i += 1; [., . as $root | $item | task($root.__internal__.i; $ARGS; "    ") | join("\n    ")])]) as $then_root |
-          ([$then_root[][1]] | join("\n")) as $then |
-          ([$then_root[][0]] | last) as $root |
+      ) elif has("if") then (
+        . | conditional($root; $ARGS) as $return |
           {
-            bash: ("  if " + (
-                $op.bash.before + ($op.yml | task($if_i; $ARGS; "") | join("; ")) + $op.bash.after
-              ) + "\n  then\n" + $then + "\n  fi; "),
-            internal: $root.__internal__
+            bash: ("  if " + $return[0].cond + "\n  then\n" + $return[0].then + (if ($return[1:] | length > 0) then ([$return[1:][] as $item | $item | (if (.cond | length > 0) then ("\n  elif " + $item.cond + "\n  then\n") else "\n  else\n" end) + $item.then] | join("")) else "" end) + "\n  fi; "),
+            internal: $return | last | .root.__internal__
           }
       ) elif has("defer") then (
         ($root | setpath(["__internal__", "i"]; .__internal__.i + 1)) as $root |

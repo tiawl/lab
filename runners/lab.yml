@@ -60,58 +60,58 @@ run:
                 - key:
                     - literal: alpine
                   var: version
-    then:
-      - image:
-          pull:
-            image:
-              - literal: alpine
-            library:
-              - literal: library
-            registry:
-              - literal: docker.io
+      then:
+        - image:
+            pull:
+              image:
+                - literal: alpine
+              library:
+                - literal: library
+              registry:
+                - literal: docker.io
+              tag:
+                - key:
+                    - literal: alpine
+                  var: version
+        - image:
+            prune:
+              matching:
+                - key:
+                    - literal: image
+                  var: loc
+                - literal: alpine
+                - key:
+                    - literal: tag
+                  var: sep
+                - literal: '*'
+        - image:
             tag:
-              - key:
-                  - literal: alpine
-                var: version
-      - image:
-          prune:
-            matching:
-              - key:
-                  - literal: image
-                var: loc
-              - literal: alpine
-              - key:
-                  - literal: tag
-                var: sep
-              - literal: '*'
-      - image:
-          tag:
-            create:
-              from:
-                image:
-                  - literal: alpine
-                tag:
-                  - key:
-                      - literal: alpine
-                    var: version
-              to:
-                image:
-                  - key:
-                      - literal: image
-                    var: loc
-                  - literal: alpine
-                tag:
-                  - key:
-                      - literal: alpine
-                    var: version
-      - image:
-          remove:
-            image:
-              - literal: alpine
-            tag:
-              - key:
-                  - literal: alpine
-                var: version
+              create:
+                from:
+                  image:
+                    - literal: alpine
+                  tag:
+                    - key:
+                        - literal: alpine
+                      var: version
+                to:
+                  image:
+                    - key:
+                        - literal: image
+                      var: loc
+                    - literal: alpine
+                  tag:
+                    - key:
+                        - literal: alpine
+                      var: version
+        - image:
+            remove:
+              image:
+                - literal: alpine
+              tag:
+                - key:
+                    - literal: alpine
+                  var: version
   - assign:
       - literal: ssh_home
     value:
