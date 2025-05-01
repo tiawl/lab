@@ -1,7 +1,8 @@
 # !/usr/bin/env --split-string gojq --from-file
 
 # TODO:
-# - command
+# - more checks like conditional "then"
+# - command: it should only be possible to run hardened command
 # - register
 # - op:
 #   - and
@@ -9,52 +10,58 @@
 #   - [[ ]]
 # - arith
 # - while/for/case
-# - recursive if/while/for/case
 # - functions
 # - on/off
 
+def indent(level): (
+  (" " * ((level + 1) * 2)) + .
+);
+
 def sanitize: (
-  [
-    .[] |
-      if has("literal") then (
-        "'" + .literal +  "'"
-      ) elif has("var") then (
-        . as $var |
-          if ($var.var | test("^[a-zA-Z_][a-zA-Z0-9_]*$")) then (
-            "\"${" + $var.var + (if ($var | has("key")) then ("[" + ($var.key | sanitize) + "]") else "" end) + "}\""
-          ) else (
-            "runner: Bad variable name: \"" + $var.var + "\"\n" | halt_error(1)
-          ) end
-      ) else (
-        "runner: Unknown object type: \"" + keys[0] + "\"\n" | halt_error(1)
-      ) end
-  ] | join("")
+  map(
+    if has("literal") then (
+      "'" + .literal + "'"
+    ) elif has("var") then (
+      . as $var |
+        if ($var.var | test("^[a-zA-Z_][a-zA-Z0-9_]*$")) then (
+          "\"${" + $var.var + (if ($var | has("key")) then ("[" + ($var.key | sanitize) + "]") else "" end) + "}\""
+        ) else (
+          "runner: Bad variable name: \"" + $var.var + "\"\n" | halt_error(1)
+        ) end
+    ) else (
+      "runner: Unknown object type: \"" + keys[0] + "\"\n" | halt_error(1)
+    ) end
+  ) | join("")
 );
 
 def op: (
-  . |
-    if (type == "object") then (
-      if has("not") then (
-        (.not | op) |
-        {
-          bash: {
-            before: ("! { " + .bash.before),
-            after: (.bash.after + "; }")
-          },
-          yml: .yml
-        }
-      ) else (
-        {
-          bash: {
-            before: "",
-            after: ""
-          },
-          yml: .
-        }
-      ) end
+
+  def op_not: (
+    (. | op) |
+    {
+      program: {
+        before: ("! { " + .program.before),
+        after: (.program.after + "; }")
+      },
+      yml: .yml
+    }
+  );
+
+  if (type == "object") then (
+    if has("not") then (
+      .not | op_not
     ) else (
-      "runner: Unknown type: \"" + type + "\"\n" | halt_error(1)
+      {
+        program: {
+          before: "{ ",
+          after: "; }"
+        },
+        yml: .
+      }
     ) end
+  ) else (
+    "runner: Unknown type: \"" + type + "\"\n" | halt_error(1)
+  ) end
 );
 
 def task_image_builder(prefix): (
@@ -110,8 +117,8 @@ def task_image(prefix): (
         ($build.image | sanitize) + " " +
         ($build.context | sanitize) + " " +
         ($build.args | length | tostring) + " " +
-        ([$build.args[].key | sanitize] | join(" ")) + " " +
-        ([$build.args[].value | sanitize] | join(" "))
+        ($build.args | map(.key | sanitize) | join(" ")) + " " +
+        ($build.args | map(.value | sanitize) | join(" "))
     ) else (
       "runner: Unknown image task type: \"" + $key + "\"\n" | halt_error(1)
     ) end
@@ -145,148 +152,209 @@ def task_container(prefix): (
     ) end
 );
 
-def pretask(i; args; prefix): (
+def xtrace_task(i; args; level): (
   [
-    prefix + "printf '\\033[38;5;" + (args.positional[(i % 30) + 2]) + "m\\033[1m" + (i + 1 | tostring) + "\\033[0m > %s\\n' \"" +
+    "printf '\\033[38;5;" + (args.positional[(i % 30) + 2]) + "m\\033[1m" + (i + 1 | tostring) + "\\033[0m > %s\\n' \"" +
       (.[0] | gsub("\""; "'") | gsub("'(?<match>[^[:space:]']+)'"; "\(.match)")) + "\" >&2"
   ] + .
 );
 
-def task(i; args; prefix): (
+def task(i; args; level): (
   . as $task |
-  if $task | isempty(.[]) then (
-    []
-  ) else (
-    ($task | keys[0]) as $key |
-    [
-      if has("image") then (
-        .image | task_image($key + " ")
-      ) elif has("container") then (
-        .container | task_container($key + " ")
-      ) else (
-        "runner: Unknown task type: \"" + $key + "\"\n" | halt_error(1)
-      ) end
-    ] | pretask(i; args; prefix)
-  ) end
-);
-
-def conditional_inner(root; args): (
-  if (.then | type != "array") then ("runner: Conditional \"then\" field must an array type but it is \"" + (.then | type) + "\"\n" | halt_error(1)) else . end |
-  . as $inner |
-  if ($inner | ((. | type == "object") and (. | keys | length == 1) and (. | keys[0] == "then"))) then (
-    {
-      op: {
-        bash: {
-          before: "",
-          after: ""
-        },
-        yml: {}
-      },
-      root: root
-    }
-  ) else (
-    {
-      op: ($inner | op),
-      root: (root | setpath(["__internal__", "i"]; .__internal__.i + 1))
-    }
-  ) end | . as $op_root | $op_root.op as $op | $op_root.root as $root |
-  ($root.__internal__.i) as $cond_i |
-  ([
-    foreach ($inner | .then[]) as $item ({root: $root}; .root.__internal__.i += 1; . as $dot | . + {then: ($item | task($dot.root.__internal__.i; args; "    ") | join("\n    "))})
-  ]) |
-    {
-      cond: ($op.bash.before + ($op.yml | task($cond_i; args; "") | join("; ")) + $op.bash.after),
-      then: ([.[].then] | join("\n")),
-      root: ([.[].root] | last)
-    }
-);
-
-def conditional(root; args): (
-  . as $conditional |
-  ($conditional.if | conditional_inner(root; args) | .) as $first |
-  [
-    $first
-  ] as $return |
-    $conditional | if has("else") then (
-      $return + [
-        foreach $conditional.else[] as $item ({root: $first.root}; . as $dot | $item | conditional_inner($dot.root; args); .)
-      ]
+    if $task | isempty(.[]) then (
+      []
     ) else (
-      $return
-    ) end | . as $return | $return
+      ($task | keys[0]) as $key |
+      [
+        if has("image") then (
+          .image | task_image($key + " ")
+        ) elif has("container") then (
+          .container | task_container($key + " ")
+        ) else (
+          "runner: Unknown task type: \"" + $key + "\"\n" | halt_error(1)
+        ) end
+      ] | xtrace_task(i; args; level) | map(. | indent(level))
+    ) end
 );
 
-(input_filename | sub(".*/";"") | sub("\\.yml$";"")) as $name |
-("runner_" + $name) as $runner |
-  $runner + " () {
-  on errexit noclobber nounset pipefail lastpipe
-
-  bash_setup
-
-  harden id
-
-  local user uid home runner_name
-  user=\"${USER:-\"$(id --user --name)\"}\"
-  uid=\"${UID:-\"$(id --user)\"}\"
-  home=\"${HOME:-\"$(printf '%s' ~)\"}\"
-  runner_name='" + $name + "'
-  readonly user uid home runner_name
-
-" + (
-  [
-    .__internal__.i = -1 |
-    . as $root |
-    $root.run[] |
-      if has("harden") then (
-        {
-          bash: ("  harden " + (.harden | sanitize)),
-          internal: $root.__internal__
-        }
-      ) elif has("assign") then (
-        {
-          bash: (. as $assign |
-            "  local " + (if $assign.type == "map" then ("-A ")
-            elif $assign.type == "array" then ("-a ")
-            elif $assign.type == "ref" then "-n"
-            elif $assign.type == "string" or $assign.type == "" or $assign.type == null then ""
-            else (
-              "runner: Unknown assign.type: \"" + $assign.type + "\"\n" | halt_error(1)
-            ) end) + ($assign.assign | sanitize) + (
-              if ($assign | has("key")) then ("[" + ($assign.key | sanitize) + "]") else "" end
-            ) + (
-              if ($assign | has("value")) then ("=" + ($assign.value | sanitize) + "") else "" end)
-            ),
-          internal: $root.__internal__
-        }
-      ) elif has("readonly") then (
-        {
-          bash: ("  readonly " + (.readonly | sanitize)),
-          internal: $root.__internal__
-        }
-      ) elif has("if") then (
-        . | conditional($root; $ARGS) as $return |
-          {
-            bash: ("  if " + $return[0].cond + "\n  then\n" + $return[0].then + (if ($return[1:] | length > 0) then ([$return[1:][] as $item | $item | (if (.cond | length > 0) then ("\n  elif " + $item.cond + "\n  then\n") else "\n  else\n" end) + $item.then] | join("")) else "" end) + "\n  fi; "),
-            internal: $return | last | .root.__internal__
-          }
-      ) elif has("defer") then (
-        ($root | setpath(["__internal__", "i"]; .__internal__.i + 1)) as $root |
-        {
-          bash: ("  defer '" + ([.defer | task($root.__internal__.i; $ARGS; "")[] | gsub("'"; "'\"'\"'")] | join("'\n  defer '")) + "'"),
-          internal: $root.__internal__
-        }
+def assign(level): (
+  . as $assign |
+    "local " + (
+      if ($assign.type == "map") then (
+        "-A "
+      ) elif ($assign.type == "array") then (
+        "-a "
+      ) elif ($assign.type == "ref") then (
+        "-n"
+      ) elif ($assign.type == "string" or $assign.type == "" or $assign.type == null) then (
+        ""
       ) else (
-        ($root | setpath(["__internal__", "i"]; .__internal__.i + 1)) as $root |
-        {
-          bash: (. | task($root.__internal__.i; $ARGS; "  ") | join("\n  ")),
-          internal: $root.__internal__
-        }
-      ) end |
-        . as $res |
-        ($root | setpath(["__internal__"]; $res.internal)) as $root |
-        $res.bash
-  ] | join("\n")
-) + "
-}
+        "runner: Unknown assign.type: \"" + $assign.type + "\"\n" | halt_error(1)
+      ) end
+    ) + ($assign.assign | sanitize) + (
+      if ($assign | has("key")) then (
+        "[" + ($assign.key | sanitize) + "]"
+      ) else "" end
+    ) + (
+      if ($assign | has("value")) then (
+        "=" + ($assign.value | sanitize) + ""
+      ) else "" end
+    ) | indent(level)
+);
 
-" + $runner + " \"${@}\""
+def keyword(internal; level): (
+  def conditional(internal; args; level): (
+    def conditional_inner(internal; args; level): (
+      # check then field is an array
+      if (.then | type != "array") then (
+        "runner: Conditional \"then\" field must an array type but it is \"" + (.then | type) + "\"\n" | halt_error(1)
+      ) else . end |
+
+      . as $inner |
+        # "else" case
+        if ($inner | ((. | type == "object") and (. | keys | length == 1) and (. | keys[0] == "then"))) then (
+          {
+            op: {
+              program: {
+                before: "",
+                after: ""
+              },
+              yml: {}
+            },
+            internal: internal
+          }
+        # "if" and "elif" case
+        ) else (
+          {
+            op: ($inner | op),
+            internal: (internal | setpath(["i"]; .i + 1))
+          }
+        ) end |
+        . as $op_internal |
+        $op_internal.op as $op |
+        $op_internal.internal as $internal |
+        ($internal.i) as $cond_i |
+        ([
+          # upgrade .internal.i when iterating over "then" content
+          foreach ($inner | .then[]) as $item (
+            {
+              internal: $internal
+            };
+            . as $dot | $item | keyword($dot.internal; level + 1) as $keyword |
+            {
+              then: $keyword.program,
+              internal: $keyword.internal
+
+            };
+            .
+          )
+        ]) |
+          {
+            cond: ($op.program.before + ($op.yml | task($cond_i; args; -1) | join("; ")) + $op.program.after),
+            then: (map(.then) | join("\n")),
+            internal: (map(.internal) | last)
+          }
+    );
+
+    . as $conditional |
+    ($conditional.if | conditional_inner(internal; args; level) | .) as $if |
+    {
+      if: $if,
+      else: []
+    } as $return |
+      $conditional |
+      if has("else") then (
+        $return | setpath(["else"]; .else + [
+          # upgrade .internal.i when iterating "if"/"elif"/"else" statements
+          foreach $conditional.else[] as $item (
+            {
+              internal: $if.internal
+            };
+            . as $dot | $item | conditional_inner($dot.internal; args; level);
+            .
+          )
+        ])
+      ) else (
+        $return
+      ) end
+  );
+
+  internal as $internal |
+    if has("harden") then (
+      {
+        program: (("harden " + (.harden | sanitize)) | indent(level)),
+        internal: $internal
+      }
+    ) elif has("assign") then (
+      . | assign(level) |
+        {
+          program: .,
+          internal: $internal
+        }
+    ) elif has("readonly") then (
+      {
+        program: (("readonly " + (.readonly | sanitize)) | indent(level)),
+        internal: $internal
+      }
+    ) elif has("if") then (
+      . | conditional($internal; $ARGS; level) as $conditional |
+        {
+          program: (
+            (("if " + $conditional.if.cond + "\n") | indent(level)) +
+            ("then\n" | indent(level)) + $conditional.if.then + "\n" + (
+              if ($conditional.else | length > 0) then (
+                $conditional.else | map(
+                  . as $item | $item | (
+                    if (.cond | length > 0) then (
+                      (("elif " + $item.cond) | indent(level)) + "\n" +
+                      ("then\n" | indent(level))
+                    ) else (
+                      "else\n" | indent(level)
+                    ) end
+                  ) + $item.then
+                ) | join("\n") + "\n"
+              ) else "" end
+            ) + ("fi" | indent(level))
+          ),
+          internal: (
+            if ($conditional.else | length == 0) then (
+              $conditional.if
+            ) else (
+              $conditional.else | last
+            ) end | .internal
+          )
+        }
+    ) elif has("defer") then (
+      ($internal | setpath(["i"]; .i + 1)) as $internal |
+      {
+        program: (.defer | task($internal.i; $ARGS; level) | map(gsub("'"; "'\"'\"'") | sub("^(?<match>[[:space:]]*)"; "\(.match)defer '") | sub("$"; "'")) | join("\n")),
+        internal: $internal
+      }
+    ) else (
+      ($internal | setpath(["i"]; .i + 1)) as $internal |
+      {
+        program: (. | task($internal.i; $ARGS; level) | join("\n")),
+        internal: $internal
+      }
+    ) end
+);
+
+def main: (
+  (input_filename | sub(".*/";"") | sub("\\.yml$";"")) as $name |
+  ("runner_" + $name) as $runner |
+  .internal = {
+    i: -1,
+    program: ($runner + " () {\n  on errexit noclobber nounset pipefail lastpipe\n\n  bash_setup\n\n  harden id\n\n  local user uid home runner_name\n  user=\"${USER:-\"$(id --user --name)\"}\"\n  uid=\"${UID:-\"$(id --user)\"}\"\n  home=\"${HOME:-\"$(printf '%s' ~)\"}\"\n  runner_name='" + $name + "'\n  readonly user uid home runner_name\n\n")
+  } |
+  . as $root |
+    reduce $root.run[] as $item (
+      $root.internal;
+      . as $internal | $item | keyword($internal; 0) as $keyword |
+        {
+          i: $keyword.internal.i,
+          program: ($internal.program + $keyword.program + "\n")
+        }
+    ) | .program + "}\n\n" + $runner + " \"${@}\""
+);
+
+. | main
