@@ -100,6 +100,11 @@ off () {
   done
 }
 
+capture () {
+  set -- "$(shopt -p)"
+  eval "restore () { ${1//$'\n'/; }; set -- \"${-}\"; while gt \"\${#1}\" 0; do set -\"\${1%"\${1#?}"}\" 2> /dev/null || :; set -- \"\${1#?}\" ; done ; }"
+}
+
 defer () {
   if str not eq "$(basename "${BASH:-unknown}")" 'bash'; then return 1; fi
   local stage fn prev_trap

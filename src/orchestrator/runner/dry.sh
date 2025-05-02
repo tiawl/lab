@@ -28,7 +28,7 @@ runner_dry () { #HELP <yaml_file>\t\t\t\t\t\t\tDisplay the runner bash script wi
     urlencode \
     not eq gt lt ge le can is has str global \
     basename dirname \
-    on off \
+    on off capture \
     defer harden \
     shuffle
     do

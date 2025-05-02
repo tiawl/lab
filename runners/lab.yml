@@ -3,8 +3,7 @@ run:
       - literal: ssh
   - harden:
       - literal: ssh-keygen
-    as:
-      - literal: ssh_keygen
+    as: ssh_keygen
   - assign:
       - literal: loc
     type: map
@@ -44,7 +43,7 @@ run:
       - literal: alpine
     value:
       - literal: "3.21"
-    global: true
+    scope: global
   - readonly:
       - literal: loc
   - readonly:
@@ -176,14 +175,14 @@ run:
       - var: ssh_home
       - literal: /
       - var: key_name
-    global: true
+    scope: global
   - assign:
       - literal: path
     key:
       - literal: ssh_home
     value:
       - var: ssh_home
-    global: true
+    scope: global
   - readonly:
       - literal: path
   - container:
@@ -265,13 +264,11 @@ run:
       - literal: bounce_ip
   - readonly:
       - literal: bounce_ip
-  - call:
-      - literal: ssh_keygen
+  - call: ssh_keygen
     args:
       - - literal: -R
       - - var: bounce_ip
-  - call:
-      - literal: ssh
+  - call: ssh
     args:
       - - literal: -i
       - - var: path

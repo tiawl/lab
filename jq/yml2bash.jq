@@ -20,16 +20,24 @@ def indent(level): (
   (" " * ((level + 1) * 4)) + .
 );
 
+def is_authorized_varname: (
+  test("^[a-zA-Z_][a-zA-Z0-9_]*$")
+);
+
+def bad_varname: (
+  "runner: Bad variable name: \"" + . + "\"\n" | halt_error(1)
+);
+
 def sanitize: (
   map(
     if has("literal") then (
       "'" + .literal + "'"
     ) elif has("var") then (
       . as $var |
-        if ($var.var | test("^[a-zA-Z_][a-zA-Z0-9_]*$")) then (
+        if ($var.var | is_authorized_varname) then (
           "\"${" + $var.var + (if ($var | has("key")) then ("[" + ($var.key | sanitize) + "]") else "" end) + "}\""
         ) else (
-          "runner: Bad variable name: \"" + $var.var + "\"\n" | halt_error(1)
+          $var.var | bad_varname
         ) end
     ) else (
       "runner: Unknown object type: \"" + keys[0] + "\"\n" | halt_error(1)
@@ -38,7 +46,6 @@ def sanitize: (
 );
 
 def op: (
-
   def op_not: (
     (. | op) |
     {
@@ -184,14 +191,13 @@ def remove_useless_quotes: (
   gsub("\""; "'") | gsub("''"; "")
 );
 
-def xtrace_task(i; args; level): (
+def xtrace_task: (
   [
-    "printf '\\033[38;5;" + (args.positional[(i % 30) + 2]) + "m\\033[1m" + (i + 1 | tostring) + "\\033[0m > %s\\n' \"" +
-      (.xtrace | remove_useless_quotes) + "\" >&2"
+    "__xtrace \"" + (.xtrace | remove_useless_quotes) + "\""
   ] + .program
 );
 
-def task(i; args; level): (
+def task(level): (
   . as $task |
     if $task | isempty(.[]) then (
       []
@@ -217,11 +223,14 @@ def task(i; args; level): (
         }
       ) elif has("call") then (
         . as $call |
-        (($call.call | sanitize) + " " + (.args | map(sanitize) | join(" "))) as $program |
+        if (.call | is_authorized_varname | not) then (
+          "runner: Bad called function name: \"" + .call + "\"\n" | halt_error(1)
+        ) else . end |
+        (.call + " " + (.args | map(sanitize) | join(" "))) as $program |
         {
           program: [
             "on noglob",
-            "set -- \"$(compgen -A function)\" '|' " + ($call.call | sanitize) + " \"${@}\"",
+            "set -- \"$(compgen -A function)\" '|' " + $call.call + " \"${@}\"",
             "off noglob",
             "case \"${2}${1//$'\\n'/\"${2}\"}${2}\" in",
             "( *\"${2}${3}${2}\"* ) : ;;",
@@ -234,26 +243,27 @@ def task(i; args; level): (
         }
       ) else (
         "runner: Unknown task type: \"" + $key + "\"\n" | halt_error(1)
-      ) end | xtrace_task(i; args; level) | map(. | indent(level))
+      ) end | xtrace_task | map(. | indent(level))
     ) end
 );
 
+# TODO; assign a list: "local -a list=()"
 def assign(level; sanitized_value): (
   (
-    if (has("global") and .global) then (
+    if (.scope == "global") then (
       "global "
-    ) else (
+    ) elif (.scope == "local" or .scope == "" or .scope == null) then (
       "local "
     ) end
   ) + (
-    if (.type == "map") then (
+    if (.type == "string" or .type == "" or .type == null) then (
+      ""
+    ) elif (.type == "map") then (
       "-A "
     ) elif (.type == "array") then (
       "-a "
     ) elif (.type == "ref") then (
       "-n"
-    ) elif (.type == "string" or .type == "" or .type == null) then (
-      ""
     ) else (
       "runner: Unknown assign.type: \"" + .type + "\"\n" | halt_error(1)
     ) end
@@ -272,9 +282,9 @@ def assign(level; sanitized_value): (
   ) | indent(level)
 );
 
-def keyword(internal; level): (
-  def conditional(internal; args; level): (
-    def conditional_inner(internal; args; level): (
+def keyword(level): (
+  def conditional(level): (
+    def conditional_inner(level): (
       # check then field is an array
       if (.then | type != "array") then (
         "runner: Conditional \"then\" field must an array type but it is \"" + (.then | type) + "\"\n" | halt_error(1)
@@ -291,43 +301,28 @@ def keyword(internal; level): (
               },
               yml: {}
             },
-            internal: internal
           }
         # "if" and "elif" case
         ) else (
           {
             op: ($inner | op),
-            internal: (internal | setpath(["i"]; .i + 1))
           }
         ) end |
-        . as $op_internal |
-        $op_internal.op as $op |
-        $op_internal.internal as $internal |
-        ($internal.i) as $cond_i |
+        .op as $op |
         ([
-          # upgrade .internal.i when iterating over "then" content
-          foreach ($inner | .then[]) as $item (
-            {
-              internal: $internal
-            };
-            . as $dot | $item | keyword($dot.internal; level + 1) as $keyword |
-            {
-              then: $keyword.program,
-              internal: $keyword.internal
-
-            };
-            .
-          )
+          $inner | .then[] | keyword(level + 1) |
+          {
+            then: .program,
+          }
         ]) |
           {
-            cond: ($op.program.before + ($op.yml | task($cond_i; args; -1) | join("; ")) + $op.program.after),
+            cond: ($op.program.before + ($op.yml | task(-1) | join("; ")) + $op.program.after),
             then: (map(.then) | join("\n")),
-            internal: (map(.internal) | last)
           }
     );
 
     . as $conditional |
-    ($conditional.if | conditional_inner(internal; args; level) | .) as $if |
+    ($conditional.if | conditional_inner(level) | .) as $if |
     {
       if: $if,
       else: []
@@ -335,138 +330,126 @@ def keyword(internal; level): (
       $conditional |
       if has("else") then (
         $return | setpath(["else"]; .else + [
-          # upgrade .internal.i when iterating "if"/"elif"/"else" statements
-          foreach $conditional.else[] as $item (
-            {
-              internal: $if.internal
-            };
-            . as $dot | $item | conditional_inner($dot.internal; args; level);
-            .
-          )
+          $conditional.else[] | conditional_inner(level)
         ])
       ) else (
         $return
       ) end
   );
 
-  def register(level; internal): (
+  def register(level): (
     [
-      foreach (.register[]) as $item (
-        {
-          internal: internal
-        };
-        . as $dot | $item | keyword($dot.internal; level + 1) as $keyword |
-        {
-          program: $keyword.program,
-          internal: $keyword.internal
-        };
-        .
-      )
+      .register[] | keyword(level + 1) |
+      {
+        program: .program
+      }
     ]
   );
 
-  internal as $internal |
-    if has("harden") then (
+  if has("harden") then (
+    {
+      program: (("harden " + (.harden | sanitize) + (
+        if has("as") then (
+          if (.as | is_authorized_varname) then (
+            " " + .as
+          ) else (
+            .as | bad_varname
+          ) end
+        ) else "" end)
+      ) | indent(level))
+    }
+  ) elif has("assign") then (
+    . | assign(level; true) |
       {
-        program: (("harden " + (.harden | sanitize) + (if has("as") then (" " + (.as | sanitize)) else "" end)) | indent(level)),
-        internal: $internal
+        program: .,
       }
-    ) elif has("assign") then (
-      . | assign(level; true) |
+  ) elif has("readonly") then (
+    {
+      program: (("readonly " + (.readonly | sanitize)) | indent(level)),
+    }
+  ) elif has("if") and (.if | has("then")) then (
+    . | conditional(level) as $conditional |
+      {
+        program: (
+          (("if " + $conditional.if.cond + "; then\n") | indent(level)) +
+          $conditional.if.then + "\n" + (
+            if ($conditional.else | length > 0) then (
+              $conditional.else | map(
+                . as $item | $item | (
+                  if (.cond | length > 0) then (
+                    (("elif " + $item.cond + "; then\n") | indent(level))
+                  ) else (
+                    "else\n" | indent(level)
+                  ) end
+                ) + $item.then
+              ) | join("\n") + "\n"
+            ) else "" end
+          ) + ("fi" | indent(level))
+        )
+      }
+  ) elif has("defer") then (
+    {
+      program: (.defer | task(level) | map(gsub("'"; "'\"'\"'") | sub("^(?<match>[[:space:]]*)"; "\(.match)defer '") | sub("$"; "'")) | join("\n")),
+    }
+  ) elif has("register") and has("into") then (
+    . as $register | register(level + 1) |
+    {
+      program: (
         {
-          program: .,
-          internal: $internal
-        }
-    ) elif has("readonly") then (
-      {
-        program: (("readonly " + (.readonly | sanitize)) | indent(level)),
-        internal: $internal
-      }
-    ) elif has("if") and (.if | has("then")) then (
-      . | conditional($internal; $ARGS; level) as $conditional |
-        {
-          program: (
-            (("if " + $conditional.if.cond + "; then\n") | indent(level)) +
-            $conditional.if.then + "\n" + (
-              if ($conditional.else | length > 0) then (
-                $conditional.else | map(
-                  . as $item | $item | (
-                    if (.cond | length > 0) then (
-                      (("elif " + $item.cond + "; then\n") | indent(level))
-                    ) else (
-                      "else\n" | indent(level)
-                    ) end
-                  ) + $item.then
-                ) | join("\n") + "\n"
-              ) else "" end
-            ) + ("fi" | indent(level))
-          ),
-          internal: (
-            if ($conditional.else | length == 0) then (
-              $conditional.if
-            ) else (
-              $conditional.else | last
-            ) end | .internal
-          )
-        }
-    ) elif has("defer") then (
-      ($internal | setpath(["i"]; .i + 1)) as $internal |
-      {
-        program: (.defer | task($internal.i; $ARGS; level) | map(gsub("'"; "'\"'\"'") | sub("^(?<match>[[:space:]]*)"; "\(.match)defer '") | sub("$"; "'")) | join("\n")),
-        internal: $internal
-      }
-    ) elif has("register") and has("into") then (
-      . as $register | register(level; $internal) |
-      {
-        program: ({
           assign: $register.into,
           value: [
             {
-              unsanitized: ("\"$(\n" + (map(.program) | join("\n")) + "\n" + (")\"" | indent(level)))
+              unsanitized: ("\"$(\n" + (map(.program) | join("\n")) + "\n" + ("declare -f __autoincr >&3\n" | indent(level + 2)) + (")\"\n" | indent(level + 1)))
             }
-          ]
-        } | assign(level; false)),
-        internal: (map(.internal) | last)
-      }
-    ) else (
-      ($internal | setpath(["i"]; .i + 1)) as $internal |
-      {
-        program: (. | task($internal.i; $ARGS; level) | join("\n")),
-        internal: $internal
-      }
-    ) end
+          ],
+        } | assign(level + 1; false) |
+        ("coproc CAT { cat; }\n" | indent(level)) +
+        ("{\n" | indent(level)) + . +
+        ("} 3>&${CAT[1]}\n" | indent(level)) +
+        ("exec {CAT[1]}>&-\n" | indent(level)) +
+        ("eval \"$(cat <&${CAT[0]})\"\n" | indent(level))
+      )
+    }
+  ) else (
+    {
+      program: (. | task(level) | join("\n")),
+    }
+  ) end
 );
 
 def main: (
   (input_filename | sub(".*/";"") | sub("\\.yml$";"")) as $name |
   0 as $level |
-  .internal = {
-    i: -1,
-    program: (
-      $ARGS.named.env + "\n\n" +
-      "main ()\n{\n" +
-      ("on errexit noclobber nounset pipefail lastpipe extglob\n\n" | indent($level)) +
-      ("bash_setup\n\n" | indent($level)) +
-      ("load_ressources\n\n" | indent($level)) +
-      ("init\n\n" | indent($level)) +
-      ("harden id\n\n" | indent($level)) +
-      ("local user uid home runner_name\n" | indent($level)) +
-      ("user=\"${USER:-\"$(id --user --name)\"}\"\n" | indent($level)) +
-      ("uid=\"${UID:-\"$(id --user)\"}\"\n" | indent($level)) +
-      ("home=\"${HOME:-\"$(printf '%s' ~)\"}\"\n" | indent($level)) +
-      ("runner_name='" + $name + "'\n" | indent($level)) +
-      ("readonly user uid home runner_name\n\n" | indent($level))
-    )
-  } |
-  . as $root |
-    reduce $root.run[] as $item (
-      $root.internal;
-      . as $internal | $item | keyword($internal; $level) as $keyword |
-        {
-          i: $keyword.internal.i,
-          program: ($internal.program + $keyword.program + "\n")
-        }
-    ) | .program + "}\n\nmain \"${@}\""
+    $ARGS.named.env + "\n\n" +
+    "__autoincr () {\n" +
+    ("REPLY=1\n" | indent($level)) +
+    ("eval \"$(declare -f \"${FUNCNAME[0]}\" | sed '/^\\s\\+REPLY=[0-9]\\+;$/ { s/;$//; :d; s/9\\(_*\\)$/_\\1/; td; s/=\\(_*\\)$/=1\\1/; tn; s/8\\(_*\\)$/9\\1/; tn; s/7\\(_*\\)$/8\\1/; tn; s/6\\(_*\\)$/7\\1/; tn;s/5\\(_*\\)$/6\\1/; tn; s/4\\(_*\\)$/5\\1/; tn; s/3\\(_*\\)$/4\\1/; tn; s/2\\(_*\\)$/3\\1/; tn; s/1\\(_*\\)$/2\\1/; tn; s/0\\(_*\\)$/1\\1/; tn; :n; y/_/0/; s/$/;/ }')\"\n" | indent($level)) +
+    "}\n\n" +
+    "__color () {\n" +
+    ("set -- \"$(( (${1} % " + ($ARGS.positional | length | tostring) + ") + 2 ))\" " + ($ARGS.positional | join(" ")) + "\n" | indent($level)) +
+    ("REPLY=\"${!1}\"\n" | indent($level)) +
+    "}\n\n" +
+    "__xtrace () {\n" +
+    ("__autoincr\n" | indent($level)) +
+    ("set -- \"${1}\" \"${REPLY}\"\n" | indent($level)) +
+    ("__color \"${2}\"\n" | indent($level)) +
+    ("set -- \"${1}\" \"${2}\" \"${REPLY}\"\n" | indent($level)) +
+    ("printf '%b\\033[1m%s\\033[0m > %s\\n' \"\\033[38;5;${3}m\" \"${2}\" \"${1}\" >&2\n" | indent($level)) +
+    "}\n\n" +
+    "main ()\n{\n" +
+    ("on errexit noclobber nounset pipefail lastpipe extglob\n\n" | indent($level)) +
+    ("bash_setup\n\n" | indent($level)) +
+    ("load_ressources\n\n" | indent($level)) +
+    ("init\n\n" | indent($level)) +
+    ("harden id\n\n" | indent($level)) +
+    ("local user uid home runner_name\n" | indent($level)) +
+    ("user=\"${USER:-\"$(id --user --name)\"}\"\n" | indent($level)) +
+    ("uid=\"${UID:-\"$(id --user)\"}\"\n" | indent($level)) +
+    ("home=\"${HOME:-\"$(printf '%s' ~)\"}\"\n" | indent($level)) +
+    ("runner_name='" + $name + "'\n" | indent($level)) +
+    ("readonly user uid home runner_name\n\n" | indent($level)) +
+    ([.run[] | keyword($level)] | map(.program) | join("\n")) +
+    "\n}\n\nmain \"${@}\""
 );
 
 . | main
