@@ -14,7 +14,7 @@
 # - on/off
 
 def indent(level): (
-  (" " * ((level + 1) * 2)) + .
+  (" " * ((level + 1) * 4)) + .
 );
 
 def sanitize: (
@@ -341,20 +341,33 @@ def keyword(internal; level): (
 
 def main: (
   (input_filename | sub(".*/";"") | sub("\\.yml$";"")) as $name |
-  ("runner_" + $name) as $runner |
+  0 as $level |
   .internal = {
     i: -1,
-    program: ($runner + " () {\n  on errexit noclobber nounset pipefail lastpipe\n\n  bash_setup\n\n  harden id\n\n  local user uid home runner_name\n  user=\"${USER:-\"$(id --user --name)\"}\"\n  uid=\"${UID:-\"$(id --user)\"}\"\n  home=\"${HOME:-\"$(printf '%s' ~)\"}\"\n  runner_name='" + $name + "'\n  readonly user uid home runner_name\n\n")
+    program: (
+      $ARGS.named.env + "\n\n" +
+      "main () {\n" +
+      ("on errexit noclobber nounset pipefail lastpipe extglob\n\n" | indent($level)) +
+      ("bash_setup\n\n" | indent($level)) +
+      ("init\n\n" | indent($level)) +
+      ("harden id\n\n" | indent($level)) +
+      ("local user uid home runner_name\n" | indent($level)) +
+      ("user=\"${USER:-\"$(id --user --name)\"}\"\n" | indent($level)) +
+      ("uid=\"${UID:-\"$(id --user)\"}\"\n" | indent($level)) +
+      ("home=\"${HOME:-\"$(printf '%s' ~)\"}\"\n" | indent($level)) +
+      ("runner_name='" + $name + "'\n" | indent($level)) +
+      ("readonly user uid home runner_name\n\n" | indent($level))
+    )
   } |
   . as $root |
     reduce $root.run[] as $item (
       $root.internal;
-      . as $internal | $item | keyword($internal; 0) as $keyword |
+      . as $internal | $item | keyword($internal; $level) as $keyword |
         {
           i: $keyword.internal.i,
           program: ($internal.program + $keyword.program + "\n")
         }
-    ) | .program + "}\n\n" + $runner + " \"${@}\""
+    ) | .program + "}\n\nmain \"${@}\""
 );
 
 . | main

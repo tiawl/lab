@@ -1,9 +1,9 @@
 #! /usr/bin/env bash
 
-orchestrator () {
-  global sdir
-  sdir="$(CDPATH='' cd -- "$(dirname "${BASH_SOURCE[0]}")" &> /dev/null && printf '%s' "${PWD}")"
-  readonly sdir
+init () {
+  # global sdir
+  # sdir="$(CDPATH='' cd -- "$(dirname "${BASH_SOURCE[0]}")" &> /dev/null && printf '%s' "${PWD}")"
+  # readonly sdir
 
   harden base64
   #harden bc
@@ -18,7 +18,7 @@ orchestrator () {
   harden tar
   #harden tee
 
-  local file backend
+  local backend
   if is socket '/var/run/containerd/containerd.sock'
   then
     backend='containerd'
@@ -35,6 +35,10 @@ orchestrator () {
   readonly backend
 
   # TODO: manage DOCKERD_HOST, BUILDKITD_HOST, CONTAINERD_HOST env vars
+}
+
+orchestrator () {
+  init
 
   case "${1:-}" in
   ( image|container|network|volume|runner|version|help ) "${@}" ;;

@@ -2,7 +2,7 @@
 
 main () {
   set -C -e -u -x -o pipefail
-  shopt -s lastpipe
+  shopt -s lastpipe extglob
 
   mkdir --parents vendor/api/services/control vendor/api/types vendor/google/protobuf vendor/google/rpc vendor/solver/pb vendor/sourcepolicy/pb
   curl --silent --show-error --output vendor/google/protobuf/any.proto https://raw.githubusercontent.com/protocolbuffers/protobuf/refs/heads/main/src/google/protobuf/any.proto
