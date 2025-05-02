@@ -55,16 +55,7 @@ help () {
   printf '\nCOMMANDS:\n${help}\n' >&2
 }
 
-${name} () {
-  if str empty "\${${name^^}_REEXEC_WITH_EMPTY_ENV:-}"
-  then
-    \\command exec -c env -i ${name^^}_REEXEC_WITH_EMPTY_ENV='yes' bash --norc --noprofile "\${BASH_SOURCE[0]}" "\${@}" || \\command exit 1
-  fi
-
-  on errexit noclobber nounset pipefail lastpipe extglob
-
-  bash_setup
-
+load_ressources () {
   global -A sed jq buf
 $(on globstar
   for dir in sed jq
@@ -86,6 +77,19 @@ $(on globstar
     fi
   done)
   readonly sed jq buf
+}
+
+${name} () {
+  if str empty "\${${name^^}_REEXEC_WITH_EMPTY_ENV:-}"
+  then
+    \\command exec -c env --ignore-environment BASH="\${BASH:-}" ${name^^}_REEXEC_WITH_EMPTY_ENV='yes' bash --norc --noprofile "\${BASH_SOURCE[0]}" "\${@}" || \\command exit 1
+  fi
+
+  on errexit noclobber nounset pipefail lastpipe extglob
+
+  bash_setup
+
+  load_ressources
 
   orchestrator "\${@}"
 }

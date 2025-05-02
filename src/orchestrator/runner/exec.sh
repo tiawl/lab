@@ -3,11 +3,11 @@
 runner_exec () { #HELP <yaml_file> [arg1 args2 ...]\t\t\t\t\tExecute the runner described by the <yaml_file>\n\t\t\t\t\t\t\t\t\t\t\tOptional arguments are used by the executed runner
   shift
 
-  local yml
-  yml="${1}"
-  readonly yml
+  local script
+  script="$(runner dry "${1}")"
+  readonly script
 
   shift
 
-  runner dry "${yml}" | bash --norc --noprofile -s -- "${@}"
+  env --ignore-environment BASH="${BASH:-}" bash --norc --noprofile -s -c "${script}" -- "${@}"
 }

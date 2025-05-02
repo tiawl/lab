@@ -18,12 +18,12 @@ image_build () { #HELP <repository> <context> [<key> <value>] [<key> <value>] [.
   replace_me='XXXXXXXXXX'
   readonly repo context method replace_me
 
-  shift 3
+  shift 2
 
   local -a curl_cmd
   curl_cmd=('curl' '--silent' '--fail' '--request' "${method}" '--unix-socket' "${path[docker_socket]}" '--data-binary' '@-' '--header' 'Content-Type: application/x-tar' '--no-buffer' '--write-out' "%{stderr}%{scheme} %{response_code}\n")
 
-  json="$(gojq --monochrome-output --null-input --compact-output '[$ARGS.positional | range(length/2|ceil) as $i | .[2 * $i:2 * $i + 2] | {(first): last}] | add' --args "${@:3}")"
+  json="$(gojq --monochrome-output --null-input --compact-output '[$ARGS.positional | range(length/2|ceil) as $i | .[2 * $i:2 * $i + 2] | {(first): last}] | add' --args "${@}")"
   endpoint="http://${version[docker_api]}/build?version=2&t=${repo}${sep[tag]}${replace_me}&buildargs="
   logged_endpoint="${endpoint}${json}"
   tag="$({

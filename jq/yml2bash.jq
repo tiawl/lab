@@ -2,16 +2,16 @@
 
 # TODO:
 # - more checks like conditional "then"
-# - call: it should only be possible to run hardened command or defined functions
 # - op:
 #   - and
 #   - or
 #   - [[ ]]
 # - arith
 # - loop:
-#   - in
-#   - while
-#   - for
+#   - in:     for <name> [ [ in [ <word> ... ] ] ; ] do <list>; done
+#   - while:  while list-1; do list-2; done
+#             while [[ expression ]]; do list-2; done
+#   - for:    for (( <expr1> ; <expr2> ; <expr3> )) ; do <list> ; done
 # - switch/case
 # - functions
 # - on/off
@@ -119,9 +119,7 @@ def task_image(prefix): (
       .build as $build | prefix + $key + " " +
         ($build.image | sanitize) + " " +
         ($build.context | sanitize) + " " +
-        ($build.args | length | tostring) + " " +
-        ($build.args | map(.key | sanitize) | join(" ")) + " " +
-        ($build.args | map(.value | sanitize) | join(" "))
+        ([$build.args[][] | sanitize] | join(" "))
     ) else (
       "runner: Unknown image task type: \"" + $key + "\"\n" | halt_error(1)
     ) end
@@ -182,11 +180,15 @@ def task_network(prefix): (
     ) end
 );
 
+def remove_useless_quotes: (
+  gsub("\""; "'") | gsub("''"; "")
+);
+
 def xtrace_task(i; args; level): (
   [
     "printf '\\033[38;5;" + (args.positional[(i % 30) + 2]) + "m\\033[1m" + (i + 1 | tostring) + "\\033[0m > %s\\n' \"" +
-      (.[0] | gsub("\""; "'") | gsub("'(?<match>[^[:space:]']+)'"; "\(.match)")) + "\" >&2"
-  ] + .
+      (.xtrace | remove_useless_quotes) + "\" >&2"
+  ] + .program
 );
 
 def task(i; args; level): (
@@ -195,47 +197,79 @@ def task(i; args; level): (
       []
     ) else (
       ($task | keys[0]) as $key |
-      [
-        if has("image") then (
-          .image | task_image($key + " ")
-        ) elif has("container") then (
-          .container | task_container($key + " ")
-        ) elif has("network") then (
-          .network | task_network($key + " ")
-        ) else (
-          "runner: Unknown task type: \"" + $key + "\"\n" | halt_error(1)
-        ) end
-      ] | xtrace_task(i; args; level) | map(. | indent(level))
+      if has("image") then (
+        .image | task_image($key + " ") as $program |
+        {
+          program: [$program],
+          xtrace: $program
+        }
+      ) elif has("container") then (
+        .container | task_container($key + " ") as $program |
+        {
+          program: [$program],
+          xtrace: $program
+        }
+      ) elif has("network") then (
+        .network | task_network($key + " ") as $program |
+        {
+          program: [$program],
+          xtrace: $program
+        }
+      ) elif has("call") then (
+        . as $call |
+        (($call.call | sanitize) + " " + (.args | map(sanitize) | join(" "))) as $program |
+        {
+          program: [
+            "on noglob",
+            "set -- \"$(compgen -A function)\" '|' " + ($call.call | sanitize) + " \"${@}\"",
+            "off noglob",
+            "case \"${2}${1//$'\\n'/\"${2}\"}${2}\" in",
+            "( *\"${2}${3}${2}\"* ) : ;;",
+            "( * ) printf 'You can not call an unhardened command or an undefined function\\n' >&2; return 1 ;;",
+            "esac",
+            "shift 3",
+            "eval \"" + ($program | remove_useless_quotes) + "\""
+          ],
+          xtrace: $program
+        }
+      ) else (
+        "runner: Unknown task type: \"" + $key + "\"\n" | halt_error(1)
+      ) end | xtrace_task(i; args; level) | map(. | indent(level))
     ) end
 );
 
 def assign(level; sanitized_value): (
-  . as $assign |
-    "local " + (
-      if ($assign.type == "map") then (
-        "-A "
-      ) elif ($assign.type == "array") then (
-        "-a "
-      ) elif ($assign.type == "ref") then (
-        "-n"
-      ) elif ($assign.type == "string" or $assign.type == "" or $assign.type == null) then (
-        ""
+  (
+    if (has("global") and .global) then (
+      "global "
+    ) else (
+      "local "
+    ) end
+  ) + (
+    if (.type == "map") then (
+      "-A "
+    ) elif (.type == "array") then (
+      "-a "
+    ) elif (.type == "ref") then (
+      "-n"
+    ) elif (.type == "string" or .type == "" or .type == null) then (
+      ""
+    ) else (
+      "runner: Unknown assign.type: \"" + .type + "\"\n" | halt_error(1)
+    ) end
+  ) + (.assign | sanitize) + (
+    if has("key") then (
+      "[" + (.key | sanitize) + "]"
+    ) else "" end
+  ) + (
+    if has("value") then (
+      if (sanitized_value) then (
+        .value | sanitize
       ) else (
-        "runner: Unknown assign.type: \"" + $assign.type + "\"\n" | halt_error(1)
-      ) end
-    ) + ($assign.assign | sanitize) + (
-      if ($assign | has("key")) then (
-        "[" + ($assign.key | sanitize) + "]"
-      ) else "" end
-    ) + (
-      if ($assign | has("value")) then (
-        if (sanitized_value) then (
-          $assign.value | sanitize
-        ) else (
-          $assign.value[0].unsanitized
-        ) end | "=" + .
-      ) else "" end
-    ) | indent(level)
+        .value[0].unsanitized
+      ) end | "=" + .
+    ) else "" end
+  ) | indent(level)
 );
 
 def keyword(internal; level): (
@@ -334,7 +368,7 @@ def keyword(internal; level): (
   internal as $internal |
     if has("harden") then (
       {
-        program: (("harden " + (.harden | sanitize)) | indent(level)),
+        program: (("harden " + (.harden | sanitize) + (if has("as") then (" " + (.as | sanitize)) else "" end)) | indent(level)),
         internal: $internal
       }
     ) elif has("assign") then (
@@ -391,7 +425,7 @@ def keyword(internal; level): (
               unsanitized: ("\"$(\n" + (map(.program) | join("\n")) + "\n" + (")\"" | indent(level)))
             }
           ]
-        }  | debug| assign(level; false)),
+        } | assign(level; false)),
         internal: (map(.internal) | last)
       }
     ) else (
@@ -413,6 +447,7 @@ def main: (
       "main ()\n{\n" +
       ("on errexit noclobber nounset pipefail lastpipe extglob\n\n" | indent($level)) +
       ("bash_setup\n\n" | indent($level)) +
+      ("load_ressources\n\n" | indent($level)) +
       ("init\n\n" | indent($level)) +
       ("harden id\n\n" | indent($level)) +
       ("local user uid home runner_name\n" | indent($level)) +
@@ -431,7 +466,7 @@ def main: (
           i: $keyword.internal.i,
           program: ($internal.program + $keyword.program + "\n")
         }
-    ) | .program + "}\n\n#main \"${@}\""
+    ) | .program + "}\n\nmain \"${@}\""
 );
 
 . | main

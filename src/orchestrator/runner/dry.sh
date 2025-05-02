@@ -23,15 +23,14 @@ runner_dry () { #HELP <yaml_file>\t\t\t\t\t\t\tDisplay the runner bash script wi
 
   gojq --yaml-input --raw-output --from-file <(printf '%s\n' "${jq[yml2bash]}") "${yml}" --args "${rainbow[@]}" --arg env "$(
   set -f
-  for func in init \
+  for func in init load_ressources bash_setup \
     $(compgen -A function -X '!(container*|image*|volume*|network*|runner*)') \
     urlencode \
     not eq gt lt ge le can is has str global \
     basename dirname \
     on off \
     defer harden \
-    shuffle \
-    bash_setup
+    shuffle
     do
       declare -f "${func}"
       printf '\n'

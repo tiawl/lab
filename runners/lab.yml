@@ -3,6 +3,8 @@ run:
       - literal: ssh
   - harden:
       - literal: ssh-keygen
+    as:
+      - literal: ssh_keygen
   - assign:
       - literal: loc
     type: map
@@ -42,6 +44,7 @@ run:
       - literal: alpine
     value:
       - literal: "3.21"
+    global: true
   - readonly:
       - literal: loc
   - readonly:
@@ -116,12 +119,16 @@ run:
       - literal: ssh_home
     value:
       - literal: /home/
-      - key:
-          - literal: USER
-        var: buildargs
+      - var: user
       - literal: /.ssh
   - readonly:
       - literal: ssh_home
+  - assign:
+      - literal: key_name
+    value:
+      - literal: host2lab
+  - readonly:
+      - literal: key_name
   - image:
       build:
         args:
@@ -141,7 +148,7 @@ run:
           - key:
               - literal: KEY_NAME
             value:
-              - literal: host2lab
+              - var: key_name
           - key:
               - literal: USER
             value:
@@ -166,19 +173,17 @@ run:
     key:
       - literal: bounce_ssh_key
     value:
-      - key:
-          - literal: SSH_HOME
-        var: buildargs
+      - var: ssh_home
       - literal: /
-      - key:
-          - literal: KEY_NAME
-        var: buildargs
+      - var: key_name
+    global: true
   - assign:
       - literal: path
     key:
       - literal: ssh_home
     value:
       - var: ssh_home
+    global: true
   - readonly:
       - literal: path
   - container:
@@ -260,3 +265,20 @@ run:
       - literal: bounce_ip
   - readonly:
       - literal: bounce_ip
+  - call:
+      - literal: ssh_keygen
+    args:
+      - - literal: -R
+      - - var: bounce_ip
+  - call:
+      - literal: ssh
+    args:
+      - - literal: -i
+      - - var: path
+          key:
+            - literal: ssh_home
+        - literal: /
+        - var: key_name
+      - - var: user
+        - literal: '@'
+        - var: bounce_ip
