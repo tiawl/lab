@@ -310,9 +310,8 @@ def keyword(level): (
         ) end |
         .op as $op |
         ([
-          $inner | .then[] | keyword(level + 1) |
           {
-            then: .program,
+            then: ($inner | .then[] | keyword(level + 1))
           }
         ]) |
           {
@@ -337,83 +336,58 @@ def keyword(level): (
       ) end
   );
 
-  def register(level): (
-    [
-      .register[] | keyword(level + 1) |
-      {
-        program: .program
-      }
-    ]
-  );
-
   if has("harden") then (
-    {
-      program: (("harden " + (.harden | sanitize) + (
-        if has("as") then (
-          if (.as | is_authorized_varname) then (
-            " " + .as
-          ) else (
-            .as | bad_varname
-          ) end
-        ) else "" end)
-      ) | indent(level))
-    }
+    ("harden " + (.harden | sanitize) + (
+      if has("as") then (
+        if (.as | is_authorized_varname) then (
+          " " + .as
+        ) else (
+          .as | bad_varname
+        ) end
+      ) else "" end)
+    ) | indent(level)
   ) elif has("assign") then (
-    . | assign(level; true) |
-      {
-        program: .,
-      }
+    . | assign(level; true)
   ) elif has("readonly") then (
-    {
-      program: (("readonly " + (.readonly | sanitize)) | indent(level)),
-    }
+    ("readonly " + (.readonly | sanitize)) | indent(level)
   ) elif has("if") and (.if | has("then")) then (
     . | conditional(level) as $conditional |
-      {
-        program: (
-          (("if " + $conditional.if.cond + "; then\n") | indent(level)) +
-          $conditional.if.then + "\n" + (
-            if ($conditional.else | length > 0) then (
-              $conditional.else | map(
-                . as $item | $item | (
-                  if (.cond | length > 0) then (
-                    (("elif " + $item.cond + "; then\n") | indent(level))
-                  ) else (
-                    "else\n" | indent(level)
-                  ) end
-                ) + $item.then
-              ) | join("\n") + "\n"
-            ) else "" end
-          ) + ("fi" | indent(level))
-        )
-      }
+      (("if " + $conditional.if.cond + "; then\n") | indent(level)) +
+      $conditional.if.then + "\n" + (
+        if ($conditional.else | length > 0) then (
+          $conditional.else | map(
+            . as $item | $item | (
+              if (.cond | length > 0) then (
+                (("elif " + $item.cond + "; then\n") | indent(level))
+              ) else (
+                "else\n" | indent(level)
+              ) end
+            ) + $item.then
+          ) | join("\n") + "\n"
+        ) else "" end
+      ) + ("fi" | indent(level))
   ) elif has("defer") then (
-    {
-      program: (.defer | task(level) | map(gsub("'"; "'\"'\"'") | sub("^(?<match>[[:space:]]*)"; "\(.match)defer '") | sub("$"; "'")) | join("\n")),
-    }
+    .defer | task(level) | map(gsub("'"; "'\"'\"'") | sub("^(?<match>[[:space:]]*)"; "\(.match)defer '") | sub("$"; "'")) | join("\n")
   ) elif has("register") and has("into") then (
-    . as $register | register(level + 1) |
-    {
-      program: (
-        {
-          assign: $register.into,
-          value: [
-            {
-              unsanitized: ("\"$(\n" + (map(.program) | join("\n")) + "\n" + ("declare -f __autoincr >&3\n" | indent(level + 2)) + (")\"\n" | indent(level + 1)))
-            }
-          ],
-        } | assign(level + 1; false) |
-        ("coproc CAT { cat; }\n" | indent(level)) +
-        ("{\n" | indent(level)) + . +
-        ("} 3>&${CAT[1]}\n" | indent(level)) +
-        ("exec {CAT[1]}>&-\n" | indent(level)) +
-        ("eval \"$(cat <&${CAT[0]})\"\n" | indent(level))
-      )
-    }
+    . as $register |
+      [
+        .register[] | keyword(level + 1)
+      ] |
+      {
+        assign: $register.into,
+        value: [
+          {
+            unsanitized: ("\"$(\n" + (. | join("\n")) + "\n" + ("declare -f __autoincr >&3\n" | indent(level + 2)) + (")\"\n" | indent(level + 1)))
+          }
+        ]
+      } | assign(level + 1; false) |
+      ("coproc CAT { cat; }\n" | indent(level)) +
+      ("{\n" | indent(level)) + . +
+      ("} 3>&${CAT[1]}\n" | indent(level)) +
+      ("exec {CAT[1]}>&-\n" | indent(level)) +
+      ("eval \"$(cat <&${CAT[0]})\"\n" | indent(level))
   ) else (
-    {
-      program: (. | task(level) | join("\n")),
-    }
+    . | task(level) | join("\n")
   ) end
 );
 
@@ -448,7 +422,7 @@ def main: (
     ("home=\"${HOME:-\"$(printf '%s' ~)\"}\"\n" | indent($level)) +
     ("runner_name='" + $name + "'\n" | indent($level)) +
     ("readonly user uid home runner_name\n\n" | indent($level)) +
-    ([.run[] | keyword($level)] | map(.program) | join("\n")) +
+    ([.run[] | keyword($level)] | join("\n")) +
     "\n}\n\nmain \"${@}\""
 );
 

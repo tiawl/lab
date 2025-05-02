@@ -7,6 +7,7 @@ init () {
 
   harden base64
   #harden bc
+  harden cat
   harden curl
   harden env
   harden gojq
