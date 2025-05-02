@@ -2,14 +2,17 @@
 
 # TODO:
 # - more checks like conditional "then"
-# - command: it should only be possible to run hardened command
-# - register
+# - call: it should only be possible to run hardened command or defined functions
 # - op:
 #   - and
 #   - or
 #   - [[ ]]
 # - arith
-# - while/for/case
+# - loop:
+#   - in
+#   - while
+#   - for
+# - switch/case
 # - functions
 # - on/off
 
@@ -147,8 +150,35 @@ def task_container(prefix): (
         ($create.name | sanitize) + " " +
         ($create.image | sanitize) + " " +
         ($create.hostname | sanitize)
+    ) elif has("start") then (
+      .start as $start | prefix + $key + " " +
+        ($start.name | sanitize)
+    ) elif has("stop") then (
+      .stop as $stop | prefix + $key + " " +
+        ($stop.name | sanitize)
     ) else (
       "runner: Unknown container task type: \"" + $key + "\"\n" | halt_error(1)
+    ) end
+);
+
+def task_network_ip(prefix): (
+  . as $ip |
+  ($ip | keys[0]) as $key |
+    if has("get") then (
+      .get as $get | prefix + $key + " " +
+        ($get.container | sanitize)
+    ) else (
+      "runner: Unknown network ip task type: \"" + $key + "\"\n" | halt_error(1)
+    ) end
+);
+
+def task_network(prefix): (
+  . as $network |
+  ($network | keys[0]) as $key |
+    if has("ip") then (
+      .ip | task_network_ip(prefix + $key + " ")
+    ) else (
+      "runner: Unknown network task type: \"" + $key + "\"\n" | halt_error(1)
     ) end
 );
 
@@ -170,6 +200,8 @@ def task(i; args; level): (
           .image | task_image($key + " ")
         ) elif has("container") then (
           .container | task_container($key + " ")
+        ) elif has("network") then (
+          .network | task_network($key + " ")
         ) else (
           "runner: Unknown task type: \"" + $key + "\"\n" | halt_error(1)
         ) end
@@ -177,7 +209,7 @@ def task(i; args; level): (
     ) end
 );
 
-def assign(level): (
+def assign(level; sanitized_value): (
   . as $assign |
     "local " + (
       if ($assign.type == "map") then (
@@ -197,7 +229,11 @@ def assign(level): (
       ) else "" end
     ) + (
       if ($assign | has("value")) then (
-        "=" + ($assign.value | sanitize) + ""
+        if (sanitized_value) then (
+          $assign.value | sanitize
+        ) else (
+          $assign.value[0].unsanitized
+        ) end | "=" + .
       ) else "" end
     ) | indent(level)
 );
@@ -279,6 +315,22 @@ def keyword(internal; level): (
       ) end
   );
 
+  def register(level; internal): (
+    [
+      foreach (.register[]) as $item (
+        {
+          internal: internal
+        };
+        . as $dot | $item | keyword($dot.internal; level + 1) as $keyword |
+        {
+          program: $keyword.program,
+          internal: $keyword.internal
+        };
+        .
+      )
+    ]
+  );
+
   internal as $internal |
     if has("harden") then (
       {
@@ -286,7 +338,7 @@ def keyword(internal; level): (
         internal: $internal
       }
     ) elif has("assign") then (
-      . | assign(level) |
+      . | assign(level; true) |
         {
           program: .,
           internal: $internal
@@ -296,18 +348,17 @@ def keyword(internal; level): (
         program: (("readonly " + (.readonly | sanitize)) | indent(level)),
         internal: $internal
       }
-    ) elif has("if") then (
+    ) elif has("if") and (.if | has("then")) then (
       . | conditional($internal; $ARGS; level) as $conditional |
         {
           program: (
-            (("if " + $conditional.if.cond + "\n") | indent(level)) +
-            ("then\n" | indent(level)) + $conditional.if.then + "\n" + (
+            (("if " + $conditional.if.cond + "; then\n") | indent(level)) +
+            $conditional.if.then + "\n" + (
               if ($conditional.else | length > 0) then (
                 $conditional.else | map(
                   . as $item | $item | (
                     if (.cond | length > 0) then (
-                      (("elif " + $item.cond) | indent(level)) + "\n" +
-                      ("then\n" | indent(level))
+                      (("elif " + $item.cond + "; then\n") | indent(level))
                     ) else (
                       "else\n" | indent(level)
                     ) end
@@ -330,6 +381,19 @@ def keyword(internal; level): (
         program: (.defer | task($internal.i; $ARGS; level) | map(gsub("'"; "'\"'\"'") | sub("^(?<match>[[:space:]]*)"; "\(.match)defer '") | sub("$"; "'")) | join("\n")),
         internal: $internal
       }
+    ) elif has("register") and has("into") then (
+      . as $register | register(level; $internal) |
+      {
+        program: ({
+          assign: $register.into,
+          value: [
+            {
+              unsanitized: ("\"$(\n" + (map(.program) | join("\n")) + "\n" + (")\"" | indent(level)))
+            }
+          ]
+        }  | debug| assign(level; false)),
+        internal: (map(.internal) | last)
+      }
     ) else (
       ($internal | setpath(["i"]; .i + 1)) as $internal |
       {
@@ -346,7 +410,7 @@ def main: (
     i: -1,
     program: (
       $ARGS.named.env + "\n\n" +
-      "main () {\n" +
+      "main ()\n{\n" +
       ("on errexit noclobber nounset pipefail lastpipe extglob\n\n" | indent($level)) +
       ("bash_setup\n\n" | indent($level)) +
       ("init\n\n" | indent($level)) +
@@ -367,7 +431,7 @@ def main: (
           i: $keyword.internal.i,
           program: ($internal.program + $keyword.program + "\n")
         }
-    ) | .program + "}\n\nmain \"${@}\""
+    ) | .program + "}\n\n#main \"${@}\""
 );
 
 . | main
