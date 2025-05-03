@@ -30,14 +30,14 @@ def bad_varname: (
 
 def sanitize: (
   map(
-    if has("literal") then (
+    if (has("literal")) then (
       "'" + .literal + "'"
-    ) elif has("var") then (
-      . as $var |
-        if ($var.var | is_authorized_varname) then (
-          "\"${" + $var.var + (if ($var | has("key")) then ("[" + ($var.key | sanitize) + "]") else "" end) + "}\""
+    ) elif (has("var")) then (
+      . as $input |
+        if ($input.var | is_authorized_varname) then (
+          "\"${" + $input.var + (if ($input | has("key")) then ("[" + ($input.key | sanitize) + "]") else "" end) + "}\""
         ) else (
-          $var.var | bad_varname
+          $input.var | bad_varname
         ) end
     ) else (
       "runner: Unknown object type: \"" + keys[0] + "\"\n" | halt_error(1)
@@ -47,7 +47,7 @@ def sanitize: (
 
 def op: (
   def op_not: (
-    (. | op) |
+    op |
     {
       program: {
         before: ("! { " + .program.before),
@@ -58,7 +58,7 @@ def op: (
   );
 
   if (type == "object") then (
-    if has("not") then (
+    if (has("not")) then (
       .not | op_not
     ) else (
       {
@@ -75,23 +75,21 @@ def op: (
 );
 
 def task_image_builder(prefix): (
-  . as $builder |
-  ($builder | keys[0]) as $key |
-    if has("prune") then (
-      .prune as $prune | prefix + $key + " prune"
+  keys[0] as $key |
+    if (has("prune")) then (
+      .prune as $prune | prefix + $key
     ) else (
       "runner: Unknown image builder task type: \"" + $key + "\"\n" | halt_error(1)
     ) end
 );
 
 def task_image_tag(prefix): (
-  . as $tag |
-  ($tag | keys[0]) as $key |
-    if has("defined") then (
+  keys[0] as $key |
+    if (has("defined")) then (
       .defined as $defined | prefix + $key + " " +
         ($defined.image | sanitize) + " " +
         ($defined.tag | sanitize)
-    ) elif has("create") then (
+    ) elif (has("create")) then (
       .create as $create | prefix + $key + " " +
         ($create.from.image | sanitize) + " " +
         ($create.from.tag | sanitize) + " " +
@@ -103,26 +101,25 @@ def task_image_tag(prefix): (
 );
 
 def task_image(prefix): (
-  . as $image |
-  ($image | keys[0]) as $key |
-    if has("tag") then (
+  keys[0] as $key |
+    if (has("tag")) then (
       .tag | task_image_tag(prefix + $key + " ")
-    ) elif has("builder") then (
+    ) elif (has("builder")) then (
       .builder | task_image_builder(prefix + $key + " ")
-    ) elif has("pull") then (
+    ) elif (has("pull")) then (
       .pull as $pull | prefix + $key + " " +
         ($pull.registry | sanitize) + " " +
         ($pull.library | sanitize) + " " +
         ($pull.image | sanitize) + " " +
         ($pull.tag | sanitize)
-    ) elif has("remove") then (
+    ) elif (has("remove")) then (
       .remove as $remove | prefix + $key + " " +
         ($remove.image | sanitize) + " " +
         ($remove.tag | sanitize)
-    ) elif has("prune") then (
+    ) elif (has("prune")) then (
       .prune as $prune | prefix + $key + " " +
         ($prune.matching | sanitize)
-    ) elif has("build") then (
+    ) elif (has("build")) then (
       .build as $build | prefix + $key + " " +
         ($build.image | sanitize) + " " +
         ($build.context | sanitize) + " " +
@@ -133,9 +130,8 @@ def task_image(prefix): (
 );
 
 def task_container_resource(prefix): (
-  . as $resource |
-  ($resource | keys[0]) as $key |
-    if has("copy") then (
+  keys[0] as $key |
+    if (has("copy")) then (
       .copy as $copy | prefix + $key + " " +
       ($copy.name | sanitize) + " " +
       ($copy.src | sanitize) + " " +
@@ -146,19 +142,18 @@ def task_container_resource(prefix): (
 );
 
 def task_container(prefix): (
-  . as $container |
-  ($container | keys[0]) as $key |
-    if has("resource") then (
+  keys[0] as $key |
+    if (has("resource")) then (
       .resource | task_container_resource(prefix + $key + " ")
-    ) elif has("create") then (
+    ) elif (has("create")) then (
       .create as $create | prefix + $key + " " +
         ($create.name | sanitize) + " " +
         ($create.image | sanitize) + " " +
         ($create.hostname | sanitize)
-    ) elif has("start") then (
+    ) elif (has("start")) then (
       .start as $start | prefix + $key + " " +
         ($start.name | sanitize)
-    ) elif has("stop") then (
+    ) elif (has("stop")) then (
       .stop as $stop | prefix + $key + " " +
         ($stop.name | sanitize)
     ) else (
@@ -167,9 +162,8 @@ def task_container(prefix): (
 );
 
 def task_network_ip(prefix): (
-  . as $ip |
-  ($ip | keys[0]) as $key |
-    if has("get") then (
+  keys[0] as $key |
+    if (has("get")) then (
       .get as $get | prefix + $key + " " +
         ($get.container | sanitize)
     ) else (
@@ -178,9 +172,8 @@ def task_network_ip(prefix): (
 );
 
 def task_network(prefix): (
-  . as $network |
-  ($network | keys[0]) as $key |
-    if has("ip") then (
+  keys[0] as $key |
+    if (has("ip")) then (
       .ip | task_network_ip(prefix + $key + " ")
     ) else (
       "runner: Unknown network task type: \"" + $key + "\"\n" | halt_error(1)
@@ -198,101 +191,147 @@ def xtrace_task: (
 );
 
 def task(level): (
-  . as $task |
-    if $task | isempty(.[]) then (
-      []
+  if (isempty(.[])) then (
+    []
+  ) else (
+    keys[0] as $key |
+    if has("image") then (
+      .image | task_image($key + " ") as $program |
+      {
+        program: [$program],
+        xtrace: $program
+      }
+    ) elif has("container") then (
+      .container | task_container($key + " ") as $program |
+      {
+        program: [$program],
+        xtrace: $program
+      }
+    ) elif has("network") then (
+      .network | task_network($key + " ") as $program |
+      {
+        program: [$program],
+        xtrace: $program
+      }
+    ) elif has("call") then (
+      . as $input |
+      if (.call | is_authorized_varname | not) then (
+        "runner: Bad called function name: \"" + .call + "\"\n" | halt_error(1)
+      ) else . end |
+      (.call + " " + (.args | map(sanitize) | join(" "))) as $program |
+      {
+        program: [
+          "on noglob",
+          "set -- \"$(compgen -A function)\" '|' " + $input.call + " \"${@}\"",
+          "off noglob",
+          "case \"${2}${1//$'\\n'/\"${2}\"}${2}\" in",
+          "( *\"${2}${3}${2}\"* ) : ;;",
+          "( * ) printf 'You can not call an unhardened command or an undefined function\\n' >&2; return 1 ;;",
+          "esac",
+          "shift 3",
+          "eval \"" + ($program | remove_useless_quotes) + "\""
+        ],
+        xtrace: $program
+      }
     ) else (
-      ($task | keys[0]) as $key |
-      if has("image") then (
-        .image | task_image($key + " ") as $program |
-        {
-          program: [$program],
-          xtrace: $program
-        }
-      ) elif has("container") then (
-        .container | task_container($key + " ") as $program |
-        {
-          program: [$program],
-          xtrace: $program
-        }
-      ) elif has("network") then (
-        .network | task_network($key + " ") as $program |
-        {
-          program: [$program],
-          xtrace: $program
-        }
-      ) elif has("call") then (
-        . as $call |
-        if (.call | is_authorized_varname | not) then (
-          "runner: Bad called function name: \"" + .call + "\"\n" | halt_error(1)
-        ) else . end |
-        (.call + " " + (.args | map(sanitize) | join(" "))) as $program |
-        {
-          program: [
-            "on noglob",
-            "set -- \"$(compgen -A function)\" '|' " + $call.call + " \"${@}\"",
-            "off noglob",
-            "case \"${2}${1//$'\\n'/\"${2}\"}${2}\" in",
-            "( *\"${2}${3}${2}\"* ) : ;;",
-            "( * ) printf 'You can not call an unhardened command or an undefined function\\n' >&2; return 1 ;;",
-            "esac",
-            "shift 3",
-            "eval \"" + ($program | remove_useless_quotes) + "\""
-          ],
-          xtrace: $program
-        }
-      ) else (
-        "runner: Unknown task type: \"" + $key + "\"\n" | halt_error(1)
-      ) end | xtrace_task | map(. | indent(level))
-    ) end
+      "runner: Unknown task type: \"" + $key + "\"\n" | halt_error(1)
+    ) end | xtrace_task | map(indent(level))
+  ) end
 );
 
-# TODO; assign a list: "local -a list=()"
+def harden(level): (
+  (
+    "harden " + (.harden | sanitize) + (
+      if (has("as")) then (
+        if (.as | is_authorized_varname) then (
+          " " + .as
+        ) else (
+          .as | bad_varname
+        ) end
+      ) else "" end)
+  ) | indent(level)
+);
+
+def default_assign: (
+  if ((.type == "") or (.type == null)) then (
+    .type = "string"
+  ) else . end |
+  if ((.scope == "") or (.scope == null)) then (
+    .scope = "local"
+  ) else . end
+);
+
 def assign(level; sanitized_value): (
+  default_assign |
+  if ((has("key")) and (.type != "string")) then (
+    "runner: Values into associative or indexed array must be string typed\n" | halt_error(1)
+  ) else . end |
+  if ((has("key")) and (has("value")) and (.value | length > 1)) then (
+    "runner: You can not attribute several values to a single key\n" | halt_error(1)
+  ) else . end |
+  if ((.type == "string") and (has("value")) and (.value | length > 1)) then (
+    "runner: You can not attribute several values to a string variable\n" | halt_error(1)
+  ) else . end | . as $input |
   (
     if (.scope == "global") then (
       "global "
-    ) elif (.scope == "local" or .scope == "" or .scope == null) then (
+    ) elif (.scope == "local") then (
       "local "
+    ) else (
+      "runner: Unknown assign.scope: \"" + .type + "\"\n" | halt_error(1)
     ) end
   ) + (
-    if (.type == "string" or .type == "" or .type == null) then (
+    if (.type == "string") then (
       ""
-    ) elif (.type == "map") then (
+    ) elif (.type == "associative") then (
       "-A "
-    ) elif (.type == "array") then (
+    ) elif (.type == "indexed") then (
       "-a "
-    ) elif (.type == "ref") then (
-      "-n"
+    ) elif (.type == "reference") then (
+      "-n "
     ) else (
       "runner: Unknown assign.type: \"" + .type + "\"\n" | halt_error(1)
     ) end
   ) + (.assign | sanitize) + (
-    if has("key") then (
+    if (has("key")) then (
       "[" + (.key | sanitize) + "]"
     ) else "" end
   ) + (
-    if has("value") then (
-      if (sanitized_value) then (
-        .value | sanitize
-      ) else (
-        .value[0].unsanitized
-      ) end | "=" + .
+    if (has("value")) then (
+      .value[] |
+        if (sanitized_value) then (
+          sanitize |
+          if (($input.type == "indexed") or ($input.type == "associative")) then (
+            "( " + . + " )"
+          ) else . end
+        ) else (
+          .[0].unsanitized
+        ) end | "=" + .
     ) else "" end
   ) | indent(level)
 );
 
-def keyword(level): (
+def readonly(level): (
+  ("readonly " + (.readonly | sanitize)) | indent(level)
+);
+
+def defer(level): (
+  .defer | task(level) | map(gsub("'"; "'\"'\"'") |
+    sub("^(?<match>[[:space:]]*)"; "\(.match)defer '") |
+    sub("$"; "'")) | join("\n")
+);
+
+def block(level): (
   def conditional(level): (
     def conditional_inner(level): (
       # check then field is an array
-      if (.then | type != "array") then (
+      if ((.then | type) != "array") then (
         "runner: Conditional \"then\" field must an array type but it is \"" + (.then | type) + "\"\n" | halt_error(1)
       ) else . end |
 
-      . as $inner |
+      . as $input |
         # "else" case
-        if ($inner | ((. | type == "object") and (. | keys | length == 1) and (. | keys[0] == "then"))) then (
+        if ($input | ((type == "object") and (keys | length == 1) and (keys[0] == "then"))) then (
           {
             op: {
               program: {
@@ -305,13 +344,13 @@ def keyword(level): (
         # "if" and "elif" case
         ) else (
           {
-            op: ($inner | op),
+            op: ($input | op),
           }
         ) end |
         .op as $op |
         ([
           {
-            then: ($inner | .then[] | keyword(level + 1))
+            then: ($input | .then[] | block(level + 1))
           }
         ]) |
           {
@@ -320,65 +359,49 @@ def keyword(level): (
           }
     );
 
-    . as $conditional |
-    ($conditional.if | conditional_inner(level) | .) as $if |
+    . as $input |
+    ($input.if | conditional_inner(level)) as $if |
     {
       if: $if,
       else: []
-    } as $return |
-      $conditional |
-      if has("else") then (
-        $return | setpath(["else"]; .else + [
-          $conditional.else[] | conditional_inner(level)
+    } as $output |
+      $input |
+      if (has("else")) then (
+        $output | setpath(["else"]; .else + [
+          $input.else[] | conditional_inner(level)
         ])
       ) else (
-        $return
-      ) end
-  );
-
-  if has("harden") then (
-    ("harden " + (.harden | sanitize) + (
-      if has("as") then (
-        if (.as | is_authorized_varname) then (
-          " " + .as
-        ) else (
-          .as | bad_varname
-        ) end
-      ) else "" end)
-    ) | indent(level)
-  ) elif has("assign") then (
-    . | assign(level; true)
-  ) elif has("readonly") then (
-    ("readonly " + (.readonly | sanitize)) | indent(level)
-  ) elif has("if") and (.if | has("then")) then (
-    . | conditional(level) as $conditional |
-      (("if " + $conditional.if.cond + "; then\n") | indent(level)) +
-      $conditional.if.then + "\n" + (
-        if ($conditional.else | length > 0) then (
-          $conditional.else | map(
-            . as $item | $item | (
+        $output
+      ) end |
+      (("if " + .if.cond + "; then\n") | indent(level)) +
+      .if.then + "\n" + (
+        if (.else | length > 0) then (
+          .else | map(
+            (
               if (.cond | length > 0) then (
-                (("elif " + $item.cond + "; then\n") | indent(level))
+                (("elif " + .cond + "; then\n") | indent(level))
               ) else (
                 "else\n" | indent(level)
               ) end
-            ) + $item.then
+            ) + .then
           ) | join("\n") + "\n"
         ) else "" end
       ) + ("fi" | indent(level))
-  ) elif has("defer") then (
-    .defer | task(level) | map(gsub("'"; "'\"'\"'") | sub("^(?<match>[[:space:]]*)"; "\(.match)defer '") | sub("$"; "'")) | join("\n")
-  ) elif has("register") and has("into") then (
-    . as $register |
+  );
+
+  def register(level): (
+    . as $input |
       [
-        .register[] | keyword(level + 1)
+        .register[] | block(level + 2)
       ] |
       {
-        assign: $register.into,
+        assign: $input.into,
         value: [
-          {
-            unsanitized: ("\"$(\n" + (. | join("\n")) + "\n" + ("declare -f __autoincr >&3\n" | indent(level + 2)) + (")\"\n" | indent(level + 1)))
-          }
+          [
+            {
+              unsanitized: ("\"$(\n" + join("\n") + "\n" + ("declare -f __autoincr >&3\n" | indent(level + 2)) + (")\"\n" | indent(level + 1)))
+            }
+          ]
         ]
       } | assign(level + 1; false) |
       ("coproc CAT { cat; }\n" | indent(level)) +
@@ -386,8 +409,23 @@ def keyword(level): (
       ("} 3>&${CAT[1]}\n" | indent(level)) +
       ("exec {CAT[1]}>&-\n" | indent(level)) +
       ("eval \"$(cat <&${CAT[0]})\"\n" | indent(level))
+  );
+
+  if (has("harden")) then (
+    harden(level)
+  ) elif (has("assign")) then (
+    assign(level; true)
+  #) elif (has("define")) then (
+  ) elif (has("readonly")) then (
+    readonly(level)
+  ) elif ((has("if")) and (.if | has("then"))) then (
+    conditional(level)
+  ) elif (has("defer")) then (
+    defer(level)
+  ) elif ((has("register")) and (has("into"))) then (
+    register(level)
   ) else (
-    . | task(level) | join("\n")
+    task(level) | join("\n")
   ) end
 );
 
@@ -422,8 +460,8 @@ def main: (
     ("home=\"${HOME:-\"$(printf '%s' ~)\"}\"\n" | indent($level)) +
     ("runner_name='" + $name + "'\n" | indent($level)) +
     ("readonly user uid home runner_name\n\n" | indent($level)) +
-    ([.run[] | keyword($level)] | join("\n")) +
+    ([.run[] | block($level)] | join("\n")) +
     "\n}\n\nmain \"${@}\""
 );
 
-. | main
+main

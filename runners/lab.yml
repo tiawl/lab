@@ -6,43 +6,43 @@ run:
     as: ssh_keygen
   - assign:
       - literal: loc
-    type: map
+    type: associative
   - assign:
       - literal: project
-    type: map
+    type: associative
   - assign:
       - literal: loc
     key:
       - literal: image
     value:
-      - literal: local
-      - key:
-          - literal: image
-        var: sep
+      - - literal: local
+        - key:
+            - literal: image
+          var: sep
   - assign:
       - literal: project
     key:
       - literal: container
     value:
-      - var: runner_name
-      - key:
-          - literal: container
-        var: sep
+      - - var: runner_name
+        - key:
+            - literal: container
+          var: sep
   - assign:
       - literal: project
     key:
       - literal: image
     value:
-      - var: runner_name
-      - key:
-          - literal: image
-        var: sep
+      - - var: runner_name
+        - key:
+            - literal: image
+          var: sep
   - assign:
       - literal: version
     key:
       - literal: alpine
     value:
-      - literal: "3.21"
+      - - literal: "3.21"
     scope: global
   - readonly:
       - literal: loc
@@ -117,15 +117,15 @@ run:
   - assign:
       - literal: ssh_home
     value:
-      - literal: /home/
-      - var: user
-      - literal: /.ssh
+      - - literal: /home/
+        - var: user
+        - literal: /.ssh
   - readonly:
       - literal: ssh_home
   - assign:
       - literal: key_name
     value:
-      - literal: host2lab
+      - - literal: host2lab
   - readonly:
       - literal: key_name
   - image:
@@ -172,16 +172,16 @@ run:
     key:
       - literal: bounce_ssh_key
     value:
-      - var: ssh_home
-      - literal: /
-      - var: key_name
+      - - var: ssh_home
+        - literal: /
+        - var: key_name
     scope: global
   - assign:
       - literal: path
     key:
       - literal: ssh_home
     value:
-      - var: ssh_home
+      - - var: ssh_home
     scope: global
   - readonly:
       - literal: path
