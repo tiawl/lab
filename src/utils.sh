@@ -134,7 +134,7 @@ defer () {
 # 2) wrap the external tool as a function
 harden () {
   if str not eq "$(basename "${BASH:-unknown}")" 'bash'; then return 1; fi
-  local old_ifs dir flag
+  local old_ifs dir flag hardened
   old_ifs="${IFS}"
   readonly old_ifs
 
@@ -157,6 +157,12 @@ harden () {
     printf 'This script needs "%s" but can not find it\n' "${1}" >&2
     return 1
   fi
+
+  hardened="$(if is func hardened; then hardened; fi)"
+  readonly hardened
+  eval "hardened () {
+    printf \"%s\n\" ${hardened:+"'"}${hardened//$'\n'/"' '"}${hardened:+"'"} '${2:-"${1//-/_}"}'
+  }"
 }
 
 shuffle () {
