@@ -116,16 +116,18 @@ capture () {
 
 defer () {
   if str not eq "$(basename "${BASH:-unknown}")" 'bash'; then return 1; fi
-  local stage prev_trap
+  local stage prev_return_trap pfx
   stage='0'
-  if is not func "__${FUNCNAME[0]}_0"
+  pfx="__${FUNCNAME[0]}_${FUNCNAME[1]}_"
+  if is not func "${pfx}0"
   then
-    prev_trap="$(trap -p RETURN)"
-    trap -- "if str not eq \"\${FUNCNAME[0]}\" \"${FUNCNAME[0]}\"; then __${FUNCNAME[0]}_0; ${prev_trap:-trap - RETURN}; fi" RETURN
+    prev_return_trap="$(trap -p RETURN)"
+    trap -- "if str eq \"\${FUNCNAME[0]}\" \"${FUNCNAME[1]}\"; then ${pfx}0; ${prev_return_trap:-trap - RETURN ERR}${prev_return_trap:+ ERR}; fi" RETURN
+    trap -- "if str eq \"\${FUNCNAME[0]}\" \"${FUNCNAME[1]}\"; then ${pfx}0; fi" ERR
   fi
-  while is func "__${FUNCNAME[0]}_$(( ++stage ))"; do :; done
+  while is func "${pfx}$(( ++stage ))"; do :; done
   (( stage-- ))
-  eval "__${FUNCNAME[0]}_${stage} () { ${*}; __${FUNCNAME[0]}_$(( stage + 1 )); unset \"\${FUNCNAME[0]}\"; }; __${FUNCNAME[0]}_$(( stage + 1 )) () { unset \"\${FUNCNAME[0]}\"; }; declare -t -f __${FUNCNAME[0]}_${stage} __${FUNCNAME[0]}_$(( stage + 1 ))"
+  eval "${pfx}${stage} () { ${*}; ${pfx}$(( stage + 1 )); unset \"\${FUNCNAME[0]}\"; }; ${pfx}$(( stage + 1 )) () { unset \"\${FUNCNAME[0]}\"; }; declare -t -f ${pfx}${stage} ${pfx}$(( stage + 1 ))"
 }
 
 # 1) fail if no external tool exists with the specified name

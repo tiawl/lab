@@ -14,9 +14,8 @@ image_tag_defined () { #HELP <image> <tag>\t\t\t\t\t\tSucceed if the <image>:<ta
   printf '%s %s\n' "${method}" "${logged_endpoint//\"/\\\"}" >&2
 
   coproc HTTP_CODE { sed --file <(printf '%s' "${sed[colored_http_code]}"); }
-
   defer 'exec {HTTP_CODE[1]}>&-'
-  defer 'readl http_code <&"${HTTP_CODE[0]}"'
+  defer 'readl http_code <&"${HTTP_CODE[0]}"; wait ${HTTP_CODE_PID}'
   defer 'printf "%s\n" "${http_code}" >&2'
 
   {

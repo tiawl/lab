@@ -282,7 +282,7 @@ def harden(level; is_internal): (
       if (has("as")) then (
         .as |
           if (is_reserved) then (
-            "You can not define a function with a reserved BASH word:" + ($ARGS.named.reserved | gsub("\n"; " ")) | exit
+            "You can not use a reserved BASH word to harden a command:" + ($ARGS.named.reserved | gsub("\n"; " ")) | exit
           ) elif (is_legit) then (
             " " + (
               if (is_internal | not) then (
@@ -464,9 +464,9 @@ def define(level; is_internal): (
         if (is_internal | not) then (
           ("coproc CAT { cat; }\n" | indent(level)) +
           ("{\n" | indent(level)) + . + "\n" +
-          ("} 3>&${CAT[1]}\n" | indent(level)) +
+          ("} 3>&\"${CAT[1]}\"\n" | indent(level)) +
           ("exec {CAT[1]}>&-\n" | indent(level)) +
-          ("eval \"$(cat <&${CAT[0]})\"\n" | indent(level))
+          ("eval \"$(cat <&\"${CAT[0]}\")\"\n" | indent(level))
         ) else . end
     );
 
@@ -573,7 +573,7 @@ def yml2bash: (
     $ARGS.named.env + "\n\n" +
     $PREFIX.function.internal + "init ()\n" +
     "{\n" +
-    ("on errexit noclobber nounset pipefail lastpipe extglob\n" | indent($level)) +
+    ("on errexit errtrace noclobber nounset pipefail lastpipe extglob\n" | indent($level)) +
     ("bash_setup\n" | indent($level)) +
     ("load_ressources\n" | indent($level)) +
     ("init\n" | indent($level)) +

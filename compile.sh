@@ -6,7 +6,7 @@ shebangless () {
 
 # executed by setup.sh
 compile () {
-  on errexit noclobber nounset pipefail lastpipe extglob
+  on errexit errtrace noclobber nounset pipefail lastpipe extglob
 
   harden base64
   harden cat
@@ -85,7 +85,7 @@ ${name} () {
     \\command exec -c env --ignore-environment BASH="\${BASH:-}" ${name^^}_REEXEC_WITH_EMPTY_ENV='yes' bash --norc --noprofile "\${BASH_SOURCE[0]}" "\${@}" || \\command exit 1
   fi
 
-  on errexit noclobber nounset pipefail lastpipe extglob
+  on errexit errtrace noclobber nounset pipefail lastpipe extglob
 
   bash_setup
 

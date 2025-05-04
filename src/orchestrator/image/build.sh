@@ -42,9 +42,12 @@ image_build () { #HELP <repository> <context> [<key> <value>] [<key> <value>] [.
 
     printf '%s %s\n' "${method}" "${logged_endpoint//\"/\\\"}" >&2
 
-    coproc HTTP_CODE { sed --file <(printf '%s' "${sed[colored_http_code]}"); }
-
     local json_object http_code
+    coproc HTTP_CODE { sed --file <(printf '%s' "${sed[colored_http_code]}"); }
+    defer 'exec {HTTP_CODE[1]}>&-'
+    defer 'readl http_code <&"${HTTP_CODE[0]}"; wait ${HTTP_CODE_PID}'
+    defer 'printf "%s\n" "${http_code}" >&2'
+
     {
       tar --directory "${context}" --create --file=- . \
         | "${curl_cmd[@]}" "${endpoint}" 2>&4 \
@@ -59,9 +62,5 @@ image_build () { #HELP <repository> <context> [<key> <value>] [<key> <value>] [.
               | gojq --raw-output --from-file <(printf '%s' "${jq[image-build-logging]}") --arg image "${repo}" >&2
           done
     } 4>&"${HTTP_CODE[1]}"
-
-    exec {HTTP_CODE[1]}>&-
-    readl http_code <&"${HTTP_CODE[0]}"
-    printf '%s\n' "${http_code}" >&2
   fi
 }
