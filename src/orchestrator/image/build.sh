@@ -42,7 +42,9 @@ image_build () { #HELP <repository> <context> [<key> <value>] [<key> <value>] [.
 
     printf '%s %s\n' "${method}" "${logged_endpoint//\"/\\\"}" >&2
 
-    local json_object
+    coproc HTTP_CODE { sed --file <(printf '%s' "${sed[colored_http_code]}"); }
+
+    local json_object http_code
     {
       tar --directory "${context}" --create --file=- . \
         | "${curl_cmd[@]}" "${endpoint}" 2>&4 \
@@ -56,6 +58,10 @@ image_build () { #HELP <repository> <context> [<key> <value>] [<key> <value>] [.
               | sed --file <(printf '%s' "${sed[protobuf2json]}") \
               | gojq --raw-output --from-file <(printf '%s' "${jq[image-build-logging]}") --arg image "${repo}" >&2
           done
-    } 4>&1 | sed --file <(printf '%s' "${sed[colored_http_code]}") >&2
+    } 4>&"${HTTP_CODE[1]}"
+
+    exec {HTTP_CODE[1]}>&-
+    readl http_code <&"${HTTP_CODE[0]}"
+    printf '%s\n' "${http_code}" >&2
   fi
 }

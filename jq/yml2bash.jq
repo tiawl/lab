@@ -13,7 +13,6 @@
 #             while [[ expression ]]; do list-2; done
 #   - for:    for (( <expr1> ; <expr2> ; <expr3> )) ; do <list> ; done
 # - switch/case
-# - functions
 # - on/off
 
 {
@@ -281,15 +280,18 @@ def harden(level; is_internal): (
   (
     "harden " + (.harden | sanitize)+ (
       if (has("as")) then (
-        if (.as | is_legit) then (
-          " " + (
-            if (is_internal | not) then (
-              $PREFIX.function.user
-            ) else "" end
-          ) + .as
-        ) else (
-          .as | bad_varname
-        ) end
+        .as |
+          if (is_reserved) then (
+            "You can not define a function with a reserved BASH word:" + ($ARGS.named.reserved | gsub("\n"; " ")) | exit
+          ) elif (is_legit) then (
+            " " + (
+              if (is_internal | not) then (
+                $PREFIX.function.user
+              ) else "" end
+            ) + .
+          ) else (
+            bad_varname
+          ) end
       ) elif (is_internal | not) then (
         " '" + $PREFIX.function.user + "'" + (.harden | sanitize) | gsub("''"; "")
       ) else "" end
@@ -550,6 +552,7 @@ def main: (
         )
       }
     } | define($level; true)
+    # TODO:
     #{
     #  name: "call2",
     #  run: [

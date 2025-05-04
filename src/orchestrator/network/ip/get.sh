@@ -3,17 +3,21 @@
 network_ip_get () { #HELP <container> <network>\t\t\t\t\t\tList <container> ip address on <network_id>
   shift
 
-  local endpoint method
+  local endpoint method http_code
   endpoint="http://${version[docker_api]}/containers/${1}/json"
   method='GET'
   readonly endpoint method
 
   printf '%s %s\n' "${method}" "${endpoint//\"/\\\"}" >&2
 
+  coproc HTTP_CODE { sed --file <(printf '%s' "${sed[colored_http_code]}"); }
+
   {
-    {
-      curl --silent --fail --request "${method}" --unix-socket "${path[docker_socket]}" --write-out '%{stderr}%{scheme} %{response_code}\n' "${endpoint}" 2>&3 \
-        | gojq --raw-output '.NetworkSettings.Networks[$net].IPAddress' --arg net "${2:-bridge}" >&4
-    } 3>&1 4>&5 | sed --file <(printf '%s' "${sed[colored_http_code]}") >&2
-  } 5>&1
+    curl --silent --fail --request "${method}" --unix-socket "${path[docker_socket]}" --write-out '%{stderr}%{scheme} %{response_code}\n' "${endpoint}" 2>&3 \
+      | gojq --raw-output '.NetworkSettings.Networks[$net].IPAddress' --arg net "${2:-bridge}"
+  } 3>&"${HTTP_CODE[1]}"
+
+  exec {HTTP_CODE[1]}>&-
+  readl http_code <&"${HTTP_CODE[0]}"
+  printf '%s\n' "${http_code}" >&2
 }

@@ -30,7 +30,8 @@ runner_dry () { #HELP <yaml_file>\t\t\t\t\t\t\tDisplay the runner bash script wi
       basename dirname \
       on off capture \
       defer harden \
-      shuffle
+      shuffle \
+      readl
       do
         declare -f "${func}"
         printf '\n'

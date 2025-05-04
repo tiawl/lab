@@ -3,7 +3,7 @@
 image_tag_defined () { #HELP <image> <tag>\t\t\t\t\t\tSucceed if the <image>:<tag> is found. Fail otherwise
   shift
 
-  local filters endpoint logged_endpoint method
+  local filters endpoint logged_endpoint method http_code
   filters="{\"reference\":{\"${1}${sep[tag]}${2}\":true}}"
   method='GET'
   endpoint="http://${version[docker_api]}/images/json?filters="
@@ -13,8 +13,14 @@ image_tag_defined () { #HELP <image> <tag>\t\t\t\t\t\tSucceed if the <image>:<ta
 
   printf '%s %s\n' "${method}" "${logged_endpoint//\"/\\\"}" >&2
 
+  coproc HTTP_CODE { sed --file <(printf '%s' "${sed[colored_http_code]}"); }
+
+  defer 'exec {HTTP_CODE[1]}>&-'
+  defer 'readl http_code <&"${HTTP_CODE[0]}"'
+  defer 'printf "%s\n" "${http_code}" >&2'
+
   {
     curl --silent --fail --request "${method}" --unix-socket "${path[docker_socket]}" --write-out "%{stderr}%{scheme} %{response_code}\n" "${endpoint}" 2>&3 \
       | gojq --exit-status '. | length > 0' > /dev/null
-  } 3>&1 | sed --file <(printf '%s' "${sed[colored_http_code]}") >&2
+  } 3>&"${HTTP_CODE[1]}"
 }
