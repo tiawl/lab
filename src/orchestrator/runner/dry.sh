@@ -22,19 +22,14 @@ runner_dry () { #HELP <yaml_file>\t\t\t\t\t\t\tDisplay the runner bash script wi
   fi
 
   gojq --yaml-input --raw-output "${jq[yml2bash]}" "${yml}" --args "${rainbow[@]}" --arg env "$(
-    set -f
-    for func in init load_ressources bash_setup \
-      $(compgen -A function -X '!(container*|image*|volume*|network*|runner*)') \
-      urlencode \
-      not eq gt lt ge le can is has str global \
-      basename dirname \
-      on off capture \
-      defer sdefer harden \
-      shuffle \
-      readl source
-      do
-        declare -f "${func}"
-        printf '\n'
-      done
+      declare -f init load_ressources bash_setup \
+        $(compgen -A function -X '!(container*|image*|volume*|network*|runner*)') \
+        urlencode \
+        not eq gt lt ge le can is has str global \
+        basename dirname \
+        on off capture \
+        defer sdefer harden \
+        shuffle \
+        readl source
     )" --arg reserved "$(compgen -A keyword -A builtin)"
 }

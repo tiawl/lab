@@ -363,7 +363,7 @@ def readonly(level): (
 );
 
 def defer(level; is_internal): (
-  .defer | task(-1; is_internal) | map(gsub("'"; "'\"'\"'")) | join("; ") | "sdefer '"+ . + "'" | indent(level)
+  . as $input | .defer | task(-1; is_internal) | map(gsub("'"; "'\"'\"'")) | join("; ") | (if ($input.defer | keys[0] | test("^container$|^image$|^network$|^volume$|^runner$")) then "s" else "" end) + "defer '"+ . + "'" | indent(level)
 );
 
 def define(level; is_internal): (
