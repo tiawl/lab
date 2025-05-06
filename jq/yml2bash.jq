@@ -48,6 +48,17 @@ def remove_useless_quotes: (
 );
 
 def sanitize: (
+  def parameter_enpansion: (
+    if ((has("default")) and (has("alternate"))) then (
+      "You can not use \"default\" and \"alternate\" value for a same variable" | exit
+    ) else . end |
+    if (has("default")) then (
+      ":-" + (.default[] | sanitize)
+    ) elif (has("alternate")) then (
+      ":+" + (.alternate[] | sanitize)
+    ) else "" end
+  );
+
   map(
     . as $input |
     if (has("literal")) then (
@@ -66,18 +77,15 @@ def sanitize: (
           if ($input | has("key")) then (
             "[" + ($input.key | sanitize) + "]"
           ) else "" end
-        ) + (
-          if (($input | has("default")) and ($input | has("alternate"))) then (
-            "You can not use \"default\" and \"alternate\" value for a same variable" | exit
-          ) else $input end |
-          if (has("default")) then (
-            ":-" + (.default[] | sanitize)
-          ) elif (has("alternate")) then (
-            ":+" + (.alternate[] | sanitize)
-          ) else "" end
-        ) + "}\""
+        ) + ($input | parameter_enpansion) + "}\""
       ) else (
         $input.var | bad_varname
+      ) end
+    ) elif (has("positional")) then (
+      if (.positional | test("^[0-9]+$")) then (
+        "\"${" + .positional + ($input | parameter_enpansion) + "}\""
+      ) else (
+        "Positional parameter only contains numeric characters" | exit
       ) end
     ) else (
       "Unknown object type: \"" + keys[0] + "\"" | exit
@@ -229,6 +237,14 @@ def task_call(is_internal): (
     ) end
 );
 
+def task_print: (
+  "printf '" + .print + "' " + (.args | map(sanitize) | join(" "))
+);
+
+def task_on_off: (
+  (keys[0]) + " " + (values[] | map(sanitize) | join(" "))
+);
+
 def xtrace_task(is_internal): (
   if (is_internal) then (
     [
@@ -247,28 +263,40 @@ def task(level; is_internal): (
     []
   ) else (
     keys[0] as $key |
-    if has("image") then (
+    if (has("image")) then (
       .image | task_image($key + " ") as $program |
       {
         program: $program,
         xtrace: $program
       }
-    ) elif has("container") then (
+    ) elif (has("container")) then (
       .container | task_container($key + " ") as $program |
       {
         program: $program,
         xtrace: $program
       }
-    ) elif has("network") then (
+    ) elif (has("network")) then (
       .network | task_network($key + " ") as $program |
       {
         program: $program,
         xtrace: $program
       }
-    ) elif has("call") then (
+    ) elif (has("call")) then (
       {
         program: task_call(is_internal),
         xtrace: (.call + " " + (.args | map(sanitize) | join(" ")))
+      }
+    ) elif (has("print")) then (
+      task_print as $program |
+      {
+        program: $program,
+        xtrace: $program
+      }
+    ) elif ((has("on")) or (has("off"))) then (
+      task_on_off as $program |
+      {
+        program: $program,
+        xtrace: $program
       }
     ) else (
       "Unknown task type: \"" + $key + "\"" | exit
@@ -363,7 +391,9 @@ def readonly(level): (
 );
 
 def defer(level; is_internal): (
-  . as $input | .defer | task(-1; is_internal) | map(gsub("'"; "'\"'\"'")) | join("; ") | (if ($input.defer | keys[0] | test("^container$|^image$|^network$|^volume$|^runner$")) then "s" else "" end) + "defer '"+ . + "'" | indent(level)
+  . as $input | .defer | task(-1; is_internal) | map(gsub("'"; "'\"'\"'")) | join("; ") | (
+    if ($input.defer | keys[0] | test("^container$|^image$|^network$|^volume$|^runner$")) then "s" else "" end
+  ) + "defer '"+ . + "'" | indent(level)
 );
 
 def define(level; is_internal): (
@@ -537,13 +567,13 @@ def main: (
         name: "main",
         run: (
           [
-            {call: "__init", args: []},
+            {call: ($PREFIX.function.internal + "init"), args: []},
             {harden: [{literal: "id"}]},
             {register: [{call: "id", args: [[{literal: "--user"}], [{literal: "--name"}]]}], into: [{literal: "user"}]},
             {assign: [{literal: "user"}], value: [[{var: "USER", default: [[{var: "user"}]]}]]},
             {register: [{call: "id", args: [[{literal: "--user"}]]}], into: [{literal: "uid"}]},
             {assign: [{literal: "uid"}], value: [[{var: "UID", default: [[{var: "uid"}]]}]]},
-            {register: [{call: "printf", args: [[{literal: "%s"}], [{char: "tilde"}]]}], into: [{literal: "home"}]},
+            {register: [{print: "%s", args: [[{char: "tilde"}]]}], into: [{literal: "home"}]},
             {assign: [{literal: "home"}], value: [[{var: "HOME", default: [[{var: "home"}]]}]]},
             {assign: [{literal: "runner_name"}], value: [[{literal: (input_filename | sub(".*/";"") | sub("\\.yml$";""))}]]},
             {readonly: [[{literal: "user"}], [{literal: "uid"}], [{literal: "home"}], [{literal: "runner_name"}]]},
@@ -552,12 +582,32 @@ def main: (
         )
       }
     } | define($level; true)
+);
+
+def internals: (
+  # TODO: 1 level is enough
+  -1 as $level |
+    [
+      {
+        define: {
+          name: "init",
+          run: (
+            [
+              {on: [[{literal: "errexit"}], [{literal: "errtrace"}], [{literal: "noclobber"}], [{literal: "nounset"}], [{literal: "pipefail"}], [{literal: "lastpipe"}], [{literal: "extglob"}]]},
+              {call: ("bash_setup"), args: []},
+              {call: ("load_ressources"), args: []},
+              {call: ("init"), args: []}
+            ]
+          )
+        }
+      }
+    ] | map(define($level; true)) | join("\n")
     # TODO:
     #{
     #  name: "call2",
     #  run: [
     #    {call: "capture", args: []},
-    #    {call: "on", args: [[{literal: "noglob"}]]},
+    #    {on: [[{literal: "noglob"}]]},
     #    {
     #      into: "authorized",
     #      register: {call: "compgen", args: [[{literal: "-A"}], [{literal: "function"}], [{literal: "-A"}], [{literal: "enabled"}]]}
@@ -570,14 +620,7 @@ def main: (
 
 def yml2bash: (
   0 as $level |
-    $ARGS.named.env + "\n\n" +
-    $PREFIX.function.internal + "init ()\n" +
-    "{\n" +
-    ("on errexit errtrace noclobber nounset pipefail lastpipe extglob\n" | indent($level)) +
-    ("bash_setup\n" | indent($level)) +
-    ("load_ressources\n" | indent($level)) +
-    ("init\n" | indent($level)) +
-    "}\n\n" +
+    $ARGS.named.env + "\n" +
     $PREFIX.function.internal + "call ()\n" +
     "{\n" +
     ("capture\n" | indent($level)) +
@@ -589,17 +632,17 @@ def yml2bash: (
     ("( * ) printf 'Unknown \"%s\". You probably forgot to harden a command, to define a function or to enable a disabled builtin\\n' \"${3}\" >&2; return 1 ;;\n" | indent($level)) +
     ("esac\n" | indent($level)) +
     ("source <(printf '%s' \"${3}\")\n" | indent($level)) +
-    "}\n\n" +
+    "}\n" +
     $PREFIX.function.internal + "autoincr ()\n" +
     "{\n" +
     ("REPLY=1\n" | indent($level)) +
     ("source /proc/self/fd/0 <<< \"$(declare -f \"${FUNCNAME[0]}\" | sed \"${sed[autoincr]}\")\"\n" | indent($level)) +
-    "}\n\n" +
+    "}\n" +
     $PREFIX.function.internal + "color ()\n" +
     "{\n" +
     ("set -- \"$(( (${1} % " + ($ARGS.positional | length | tostring) + ") + 2 ))\" " + ($ARGS.positional | join(" ")) + "\n" | indent($level)) +
     ("REPLY=\"${!1}\"\n" | indent($level)) +
-    "}\n\n" +
+    "}\n" +
     $PREFIX.function.internal + "xtrace ()\n" +
     "{\n" +
     ($PREFIX.function.internal + "autoincr\n" | indent($level)) +
@@ -607,8 +650,9 @@ def yml2bash: (
     ($PREFIX.function.internal + "color \"${2}\"\n" | indent($level)) +
     ("set -- \"${1}\" \"${2}\" \"${REPLY}\"\n" | indent($level)) +
     ("printf '%b\\033[1m%s\\033[0m > %s\\n' \"\\033[38;5;${3}m\" \"${2}\" \"${1}\" >&2\n" | indent($level)) +
-    "}\n\n" +
-    main + "\n" +
+    "}\n" +
+    internals +
+    main +
     $PREFIX.function.internal + "main \"${@}\""
 );
 
