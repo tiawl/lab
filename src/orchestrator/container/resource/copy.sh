@@ -10,13 +10,11 @@ container_resource_copy () { #HELP <container_name> <container_path> <host_path>
 
   printf '%s %s\n' "${method}" "${endpoint//\"/\\\"}" >&2
 
-  coproc HTTP_CODE { sed --file <(printf '%s' "${sed[colored_http_code]}"); }
-  defer 'exec {HTTP_CODE[1]}>&-'
-  defer 'readl http_code <&"${HTTP_CODE[0]}"; wait ${HTTP_CODE_PID}'
-  defer 'printf "%s\n" "${http_code}" >&2'
+  coproc HTTP_CODE { sed "${sed[colored_http_code]}"; }
+  defer 'exec {HTTP_CODE[1]}>&-; readl http_code <&${HTTP_CODE[0]}; wait "${HTTP_CODE_PID}" 2> /dev/null || :; printf "%s\n" "${http_code}" >&2'
 
   {
     curl --silent --fail --request "${method}" --unix-socket "${path[docker_socket]}" --output - --write-out "%{stderr}%{scheme} %{response_code}\n" "${endpoint}" 2>&3 \
       | tar --extract --directory "${3}"
-  } 3>&"${HTTP_CODE[1]}"
+  } 3>&${HTTP_CODE[1]}
 }

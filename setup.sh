@@ -118,7 +118,7 @@ setup () (
 
   # TODO: add buildkitd socket
 
-  exec env --ignore-environment SDIR="${sdir}" BASH_ENV="${sdir}/src/utils.sh" bash --norc --noprofile "${sdir}/compile.sh"
+  exec env --ignore-environment SDIR="${sdir}" BASH_ENV="${sdir}/src/utils.bash" bash --norc --noprofile "${sdir}/compile.sh"
 )
 
 setup "${@}"

@@ -21,7 +21,7 @@ runner_dry () { #HELP <yaml_file>\t\t\t\t\t\t\tDisplay the runner bash script wi
     return 1
   fi
 
-  gojq --yaml-input --raw-output --from-file <(printf '%s\n' "${jq[yml2bash]}") "${yml}" --args "${rainbow[@]}" --arg env "$(
+  gojq --yaml-input --raw-output "${jq[yml2bash]}" "${yml}" --args "${rainbow[@]}" --arg env "$(
     set -f
     for func in init load_ressources bash_setup \
       $(compgen -A function -X '!(container*|image*|volume*|network*|runner*)') \
@@ -31,7 +31,7 @@ runner_dry () { #HELP <yaml_file>\t\t\t\t\t\t\tDisplay the runner bash script wi
       on off capture \
       defer harden \
       shuffle \
-      readl
+      readl source
       do
         declare -f "${func}"
         printf '\n'

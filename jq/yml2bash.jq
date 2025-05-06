@@ -365,7 +365,10 @@ def readonly(level): (
 def defer(level; is_internal): (
   .defer | task(level; is_internal) | map(gsub("'"; "'\"'\"'") |
     sub("^(?<match>[[:space:]]*)"; "\(.match)defer '") |
-    sub("$"; "'")) | join("\n")
+    sub("$"; "'")) | .[-1] = (
+      .[-1] | sub("^(?<match>[[:space:]]*defer ')"; "\(.match)(")
+        | sub("'$"; ")'")
+    ) | join("\n")
 );
 
 def define(level; is_internal): (
@@ -464,9 +467,11 @@ def define(level; is_internal): (
         if (is_internal | not) then (
           ("coproc CAT { cat; }\n" | indent(level)) +
           ("{\n" | indent(level)) + . + "\n" +
-          ("} 3>&\"${CAT[1]}\"\n" | indent(level)) +
+          ("} 3>&${CAT[1]}\n" | indent(level)) +
           ("exec {CAT[1]}>&-\n" | indent(level)) +
-          ("eval \"$(cat <&\"${CAT[0]}\")\"\n" | indent(level))
+          ("mapfile source_me <&${CAT[0]}\n" | indent(level)) +
+          ("source /proc/self/fd/0 <<< \"${source_me[@]}\"\n" | indent(level)) +
+          ("unset source_me\n" | indent(level))
         ) else . end
     );
 
@@ -588,12 +593,12 @@ def yml2bash: (
     ("( *\"${2}${3%% *}${2}\"* ) : ;;\n" | indent($level)) +
     ("( * ) printf 'Unknown \"%s\". You probably forgot to harden a command, to define a function or to enable a disabled builtin\\n' \"${3}\" >&2; return 1 ;;\n" | indent($level)) +
     ("esac\n" | indent($level)) +
-    ("eval \"${3}\"\n" | indent($level)) +
+    ("source <(printf '%s' \"${3}\")\n" | indent($level)) +
     "}\n\n" +
     $PREFIX.function.internal + "autoincr ()\n" +
     "{\n" +
     ("REPLY=1\n" | indent($level)) +
-    ("eval \"$(declare -f \"${FUNCNAME[0]}\" | sed \"${sed[autoincr]}\")\"\n" | indent($level)) +
+    ("source /proc/self/fd/0 <<< \"$(declare -f \"${FUNCNAME[0]}\" | sed \"${sed[autoincr]}\")\"\n" | indent($level)) +
     "}\n\n" +
     $PREFIX.function.internal + "color ()\n" +
     "{\n" +

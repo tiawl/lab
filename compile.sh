@@ -1,7 +1,7 @@
 #! /usr/bin/env bash
 
 shebangless () {
-  sed '/^#\s*!/{N;/\n$/d;s/.*\n//;p;d}' "${1}"
+  sed '/^#\s*!/{:loop;N;s/.*\n$//;t loop;s/^\n\+//}' "${@}"
 }
 
 # executed by setup.sh
@@ -41,7 +41,7 @@ $(on globstar
   do
     if is file "${src}"
     then
-      shebangless "${src}"
+      sed 's/.*#SKIP$//g' "${src}" | shebangless
       printf '\n'
     fi
   done)
