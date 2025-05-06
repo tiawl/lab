@@ -363,12 +363,7 @@ def readonly(level): (
 );
 
 def defer(level; is_internal): (
-  .defer | task(level; is_internal) | map(gsub("'"; "'\"'\"'") |
-    sub("^(?<match>[[:space:]]*)"; "\(.match)defer '") |
-    sub("$"; "'")) | .[-1] = (
-      .[-1] | sub("^(?<match>[[:space:]]*defer ')"; "\(.match)(")
-        | sub("'$"; ")'")
-    ) | join("\n")
+  .defer | task(-1; is_internal) | map(gsub("'"; "'\"'\"'")) | join("; ") | "sdefer '"+ . + "'" | indent(level)
 );
 
 def define(level; is_internal): (

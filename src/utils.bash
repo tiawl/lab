@@ -66,6 +66,11 @@ defer () {
   source /proc/self/fd/0 <<< "${pfx}${stage} () { ${*}; ${pfx}$(( stage + 1 )); unset \"\${FUNCNAME[0]}\"; }; ${pfx}$(( stage + 1 )) () { unset \"\${FUNCNAME[0]}\"; }; declare -t -f ${pfx}${stage} ${pfx}$(( stage + 1 ))"
 }
 
+# sdefer definition:
+set -- "$(declare -f defer)" "${@}"
+source /proc/self/fd/0 <<< "s${1/'${*}'/'(${*})'}"
+shift
+
 # 1) fail if no external tool exists with the specified name
 # 2) wrap the external tool as a function
 harden () {

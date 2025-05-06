@@ -29,7 +29,7 @@ runner_dry () { #HELP <yaml_file>\t\t\t\t\t\t\tDisplay the runner bash script wi
       not eq gt lt ge le can is has str global \
       basename dirname \
       on off capture \
-      defer harden \
+      defer sdefer harden \
       shuffle \
       readl source
       do
