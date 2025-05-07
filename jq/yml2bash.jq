@@ -391,9 +391,17 @@ def readonly(level): (
 );
 
 def defer(level; is_internal): (
-  . as $input | .defer | task(-1; is_internal) | map(gsub("'"; "'\"'\"'")) | join("; ") | (
-    if ($input.defer | keys[0] | test("^container$|^image$|^network$|^volume$|^runner$")) then "s" else "" end
-  ) + "defer '"+ . + "'" | indent(level)
+  .defer |
+  ((keys[0] | if (test("^container$|^image$|^network$|^volume$|^runner$")) then "s" else "" end) + "defer") as $fn |
+  task(-1; is_internal) | map(
+    gsub("'"; "'\"'\"'") | (
+      if (startswith($PREFIX.function.internal + "xtrace")) then (
+        "defer '"
+      ) else (
+        $fn + " '"
+      ) end
+    ) + . + "'" | indent(level)
+  ) | join("\n")
 );
 
 def define(level; is_internal): (

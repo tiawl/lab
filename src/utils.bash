@@ -54,7 +54,7 @@ capture () {
 defer () {
   local stage prev_return_trap pfx
   stage='0'
-  pfx="__${FUNCNAME[0]}_${FUNCNAME[1]}_"
+  pfx="__${FUNCNAME[0]#s}_${FUNCNAME[1]}_"
   if is not func "${pfx}0"
   then
     prev_return_trap="$(trap -p RETURN)"
