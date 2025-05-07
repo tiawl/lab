@@ -13,7 +13,6 @@
 #             while [[ expression ]]; do list-2; done
 #   - for:    for (( <expr1> ; <expr2> ; <expr3> )) ; do <list> ; done
 # - switch/case
-# - on/off
 
 {
   function: {
@@ -21,6 +20,11 @@
     internal: "__"
   }
 } as $PREFIX |
+{
+  internal: -1,
+  quiet: 0,
+  user: 1
+} as $MODE |
 
 def indent(level): (
   (" " * ((level + 1) * 4)) + .
@@ -48,7 +52,7 @@ def remove_useless_quotes: (
 );
 
 def sanitize: (
-  def parameter_enpansion: (
+  def expansion: (
     if ((has("default")) and (has("alternate"))) then (
       "You can not use \"default\" and \"alternate\" value for a same variable" | exit
     ) else . end |
@@ -77,13 +81,13 @@ def sanitize: (
           if ($input | has("key")) then (
             "[" + ($input.key | sanitize) + "]"
           ) else "" end
-        ) + ($input | parameter_enpansion) + "}\""
+        ) + ($input | expansion) + "}\""
       ) else (
         $input.var | bad_varname
       ) end
-    ) elif (has("positional")) then (
-      if (.positional | test("^[0-9]+$")) then (
-        "\"${" + .positional + ($input | parameter_enpansion) + "}\""
+    ) elif (has("parameter")) then (
+      if (.parameter | tostring | test("^[0-9]+$")) then (
+        "\"${" + (.parameter | tostring) + ($input | expansion) + "}\""
       ) else (
         "Positional parameter only contains numeric characters" | exit
       ) end
@@ -228,9 +232,9 @@ def task_network(prefix): (
     ) end
 );
 
-def task_call(is_internal): (
+def task_call(mode): (
   . as $input |
-    if (is_internal) then (
+    if (mode == $MODE.internal) then (
       (.call + " " + (.args | map(sanitize) | join(" "))) | remove_useless_quotes
     ) else (
       $PREFIX.function.internal + "call \"" + (($PREFIX.function.user + .call + " " + (.args | map(sanitize) | join(" "))) | remove_useless_quotes) + "\""
@@ -245,20 +249,41 @@ def task_on_off: (
   (keys[0]) + " " + (values[] | map(sanitize) | join(" "))
 );
 
-def xtrace_task(is_internal): (
-  if (is_internal) then (
+def task_capture_restore: (
+  if (.capture or .restore) then (keys[0]) else "" end
+);
+
+def task_parameters: (
+  "set -- " + (.parameters | map(sanitize) | join(" "))
+);
+
+def xtrace_task(mode): (
+  if (mode == $MODE.user) then (
     [
+      $PREFIX.function.internal + "xtrace \"" + (.xtrace | remove_useless_quotes) + "\"",
       .program
     ]
   ) else (
     [
-      $PREFIX.function.internal + "xtrace \"" + (.xtrace | remove_useless_quotes) + "\"",
       .program
     ]
   ) end
 );
 
-def task(level; is_internal): (
+# TODO: avoid repetition here
+def task(level; mode): (
+  def task_source(mode): (
+    "source " + (
+      if (type == "array") then (
+        "/proc/self/fd/0 <<< " + (.source | map(sanitize) | join(" "))
+      ) elif (type == "object") then (
+        "< <(" + (.source | task(-1; if (mode == $MODE.internal) then $MODE.internal else $MODE.quiet end) | join("; ")) + ")"
+      ) else (
+        "Unauthorized type for source task" | exit
+      ) end
+    )
+  );
+
   if (isempty(.[])) then (
     []
   ) else (
@@ -283,11 +308,17 @@ def task(level; is_internal): (
       }
     ) elif (has("call")) then (
       {
-        program: task_call(is_internal),
+        program: task_call(mode),
         xtrace: (.call + " " + (.args | map(sanitize) | join(" ")))
       }
     ) elif (has("print")) then (
       task_print as $program |
+      {
+        program: $program,
+        xtrace: $program
+      }
+    ) elif (has("parameters")) then (
+      task_parameters as $program |
       {
         program: $program,
         xtrace: $program
@@ -298,13 +329,25 @@ def task(level; is_internal): (
         program: $program,
         xtrace: $program
       }
+    ) elif ((has("capture")) or (has("restore"))) then (
+      task_capture_restore as $program |
+      {
+        program: $program,
+        xtrace: $program
+      }
+    ) elif (has("source")) then (
+      task_source(mode) as $program |
+      {
+        program: $program,
+        xtrace: $program
+      }
     ) else (
       "Unknown task type: \"" + $key + "\"" | exit
-    ) end | xtrace_task(is_internal) | map(indent(level))
+    ) end | xtrace_task(mode) | map(indent(level))
   ) end
 );
 
-def harden(level; is_internal): (
+def harden(level; mode): (
   (
     "harden " + (.harden | sanitize)+ (
       if (has("as")) then (
@@ -313,14 +356,14 @@ def harden(level; is_internal): (
             "You can not use a reserved BASH word to harden a command:" + ($ARGS.named.reserved | gsub("\n"; " ")) | exit
           ) elif (is_legit) then (
             " " + (
-              if (is_internal | not) then (
+              if (mode != $MODE.internal) then (
                 $PREFIX.function.user
               ) else "" end
             ) + .
           ) else (
             bad_varname
           ) end
-      ) elif (is_internal | not) then (
+      ) elif (mode != $MODE.internal) then (
         " '" + $PREFIX.function.user + "'" + (.harden | sanitize) | gsub("''"; "")
       ) else "" end
     )
@@ -390,10 +433,10 @@ def readonly(level): (
   ("readonly " + (.readonly | map(sanitize) | join(" "))) | indent(level)
 );
 
-def defer(level; is_internal): (
+def defer(level; mode): (
   .defer |
   ((keys[0] | if (test("^container$|^image$|^network$|^volume$|^runner$")) then "s" else "" end) + "defer") as $fn |
-  task(-1; is_internal) | map(
+  task(-1; mode) | map(
     gsub("'"; "'\"'\"'") | (
       if (startswith($PREFIX.function.internal + "xtrace")) then (
         "defer '"
@@ -404,10 +447,10 @@ def defer(level; is_internal): (
   ) | join("\n")
 );
 
-def define(level; is_internal): (
-  def block(level; is_internal): (
-    def conditional(level; is_internal): (
-      def conditional_inner(level; is_internal): (
+def define(level; mode): (
+  def block(level; mode): (
+    def conditional(level; mode): (
+      def conditional_inner(level; mode): (
         # check "run" field is an array
         if ((.run | type) != "array") then (
           "Conditional \"run\" field must an array type but it is \"" + (.run | type) + "\"" | exit
@@ -434,11 +477,11 @@ def define(level; is_internal): (
           .op as $op |
           ([
             {
-              run: ($input | .run[] | block(level + 1; is_internal))
+              run: ($input | .run[] | block(level + 1; mode))
             }
           ]) |
             {
-              cond: ($op.program.before + ($op.yml | task(-1; is_internal) | join("; ")) + $op.program.after),
+              cond: ($op.program.before + ($op.yml | task(-1; mode) | join("; ")) + $op.program.after),
               run: (map(.run) | join("\n")),
             }
       );
@@ -447,7 +490,7 @@ def define(level; is_internal): (
       if (.if | has("run") | not) then (
         ".if used without .if.run" | exit
       ) else . end |
-      ($input.if | conditional_inner(level; is_internal)) as $if |
+      ($input.if | conditional_inner(level; mode)) as $if |
       {
         if: $if,
         else: []
@@ -455,7 +498,7 @@ def define(level; is_internal): (
         $input |
         if (has("else")) then (
           $output | setpath(["else"]; .else + [
-            $input.else[] | conditional_inner(level; is_internal)
+            $input.else[] | conditional_inner(level; mode)
           ])
         ) else (
           $output
@@ -476,20 +519,20 @@ def define(level; is_internal): (
         ) + ("fi" | indent(level))
     );
 
-    def register(level; is_internal): (
+    def register(level; mode): (
       . as $input |
-      (if (is_internal) then 0 else 1 end) as $offset |
+      (if (mode == $MODE.internal) then 0 else 1 end) as $offset |
         if (. | has("into") | not) then (
           ".register used without .into" | exit
         ) else . end |
-        .register[] | block(level + $offset + 1; is_internal) |
+        .register[] | block(level + $offset + 1; mode) |
         {
           assign: $input.into,
           value: [
             [
               {
                 unsanitized: ("\"$(\n" + . + "\n" + (
-                  if (is_internal | not) then (
+                  if (mode != $MODE.internal) then (
                     "declare -f " + $PREFIX.function.internal + "autoincr >&3\n" | indent(level + $offset + 1)
                   ) else "" end
                 ) + (")\"" | indent(level + $offset)))
@@ -497,7 +540,7 @@ def define(level; is_internal): (
             ]
           ]
         } | assign(level + $offset; false) |
-        if (is_internal | not) then (
+        if (mode != $MODE.internal) then (
           ("coproc CAT { cat; }\n" | indent(level)) +
           ("{\n" | indent(level)) + . + "\n" +
           ("} 3>&${CAT[1]}\n" | indent(level)) +
@@ -509,53 +552,53 @@ def define(level; is_internal): (
     );
 
     if (has("harden")) then (
-      harden(level; is_internal)
+      harden(level; mode)
     ) elif (has("assign")) then (
       assign(level; true)
     ) elif (has("define")) then (
-      define(level; is_internal)
+      define(level; mode)
     ) elif (has("readonly")) then (
       readonly(level)
     ) elif (has("if")) then (
-      conditional(level; is_internal)
+      conditional(level; mode)
     ) elif (has("defer")) then (
-      defer(level; is_internal)
+      defer(level; mode)
     ) elif (has("register")) then (
-      register(level; is_internal)
+      register(level; mode)
     ) elif (has("initialized")) then (
-      false
+      $MODE.user
     ) else (
-      task(level; is_internal) | join("\n")
+      task(level; mode) | join("\n")
     ) end
   );
 
-  .define |
-    if (.name | is_reserved) then (
+  . as $input | .define |
+    if (is_reserved) then (
       "You can not define a function with a reserved BASH word:" + ($ARGS.named.reserved | gsub("\n"; " ")) | exit
-    ) elif (.name | is_legit | not) then (
-      .name | bad_varname
+    ) elif (is_legit | not) then (
+      bad_varname
     ) else . end | ((
-    if (is_internal) then (
+    if (mode == $MODE.internal) then (
       $PREFIX.function.internal
     ) else (
       $PREFIX.function.user
-    ) end + .name + " ()\n") | indent(level)) + (
+    ) end + . + " ()\n") | indent(level)) + (
     "{\n" | indent(level)) + (
     [
-      foreach .run[] as $item (
+      foreach $input.run[] as $item (
         {
-          is_internal: is_internal
+          mode: mode
         };
-        . as $input |
-        ($item | block(level + 1; $input.is_internal)) as $output |
+        . as $foreach_input |
+        ($item | block(level + 1; $foreach_input.mode)) as $output |
         if ($output | type == "string") then (
           {
-            is_internal: $input.is_internal,
+            mode: $foreach_input.mode,
             extract: $output
           }
-        ) elif ($output | type == "boolean") then (
+        ) elif ($output | type == "number") then (
           {
-            is_internal: $output,
+            mode: $output,
             extract: ""
           }
         ) end;
@@ -571,25 +614,23 @@ def main: (
   -1 as $level |
     . as $input |
     {
-      define: {
-        name: "main",
-        run: (
-          [
-            {call: ($PREFIX.function.internal + "init"), args: []},
-            {harden: [{literal: "id"}]},
-            {register: [{call: "id", args: [[{literal: "--user"}], [{literal: "--name"}]]}], into: [{literal: "user"}]},
-            {assign: [{literal: "user"}], value: [[{var: "USER", default: [[{var: "user"}]]}]]},
-            {register: [{call: "id", args: [[{literal: "--user"}]]}], into: [{literal: "uid"}]},
-            {assign: [{literal: "uid"}], value: [[{var: "UID", default: [[{var: "uid"}]]}]]},
-            {register: [{print: "%s", args: [[{char: "tilde"}]]}], into: [{literal: "home"}]},
-            {assign: [{literal: "home"}], value: [[{var: "HOME", default: [[{var: "home"}]]}]]},
-            {assign: [{literal: "runner_name"}], value: [[{literal: (input_filename | sub(".*/";"") | sub("\\.yml$";""))}]]},
-            {readonly: [[{literal: "user"}], [{literal: "uid"}], [{literal: "home"}], [{literal: "runner_name"}]]},
-            {initialized: true}
-          ] + $input.run
-        )
-      }
-    } | define($level; true)
+      define: "main",
+      run: (
+        [
+          {call: ($PREFIX.function.internal + "init"), args: []},
+          {harden: [{literal: "id"}]},
+          {register: [{call: "id", args: [[{literal: "--user"}], [{literal: "--name"}]]}], into: [{literal: "user"}]},
+          {assign: [{literal: "user"}], value: [[{var: "USER", default: [[{var: "user"}]]}]]},
+          {register: [{call: "id", args: [[{literal: "--user"}]]}], into: [{literal: "uid"}]},
+          {assign: [{literal: "uid"}], value: [[{var: "UID", default: [[{var: "uid"}]]}]]},
+          {register: [{print: "%s", args: [[{char: "tilde"}]]}], into: [{literal: "home"}]},
+          {assign: [{literal: "home"}], value: [[{var: "HOME", default: [[{var: "home"}]]}]]},
+          {assign: [{literal: "runner_name"}], value: [[{literal: (input_filename | sub(".*/";"") | sub("\\.yml$";""))}]]},
+          {readonly: [[{literal: "user"}], [{literal: "uid"}], [{literal: "home"}], [{literal: "runner_name"}]]},
+          {initialized: true}
+        ] + $input.run
+      )
+    } | define($level; $MODE.internal)
 );
 
 def internals: (
@@ -597,33 +638,30 @@ def internals: (
   -1 as $level |
     [
       {
-        define: {
-          name: "init",
-          run: (
-            [
-              {on: [[{literal: "errexit"}], [{literal: "errtrace"}], [{literal: "noclobber"}], [{literal: "nounset"}], [{literal: "pipefail"}], [{literal: "lastpipe"}], [{literal: "extglob"}]]},
-              {call: ("bash_setup"), args: []},
-              {call: ("load_ressources"), args: []},
-              {call: ("init"), args: []}
-            ]
-          )
-        }
+        define: "init",
+        run: [
+          {on: [[{literal: "errexit"}], [{literal: "errtrace"}], [{literal: "noclobber"}], [{literal: "nounset"}], [{literal: "pipefail"}], [{literal: "lastpipe"}], [{literal: "extglob"}]]},
+          {call: "bash_setup", args: []},
+          {call: "load_ressources", args: []},
+          {call: "init", args: []}
+        ]
+      },
+      {
+        define: "call2",
+        run: [
+          {capture: true},
+          {on: [[{literal: "noglob"}]]},
+          #{
+          #  into: "authorized",
+          #  register: {call: "compgen", args: [[{literal: "-A"}], [{literal: "function"}], [{literal: "-A"}], [{literal: "enabled"}]]}
+          #},
+          {parameters: [[{var: "authorized"}], [{literal: "|"}], [{parameter: 1}]]},
+          {restore: true},
+          # TODO: case statement
+          {source: {print: "%s", args: [[{parameter: 3}]]}}
+        ]
       }
-    ] | map(define($level; true)) | join("\n")
-    # TODO:
-    #{
-    #  name: "call2",
-    #  run: [
-    #    {call: "capture", args: []},
-    #    {on: [[{literal: "noglob"}]]},
-    #    {
-    #      into: "authorized",
-    #      register: {call: "compgen", args: [[{literal: "-A"}], [{literal: "function"}], [{literal: "-A"}], [{literal: "enabled"}]]}
-    #    },
-    #    {call: "set", args: [[{literal: "--"}], [{var: "authorized"}], [{literal: "|"}], [{var: "1"}]]},
-    #    {call: "restore", args: []}
-    #  ]
-    #} | define($level; $PREFIX.function.internal) as $__call | $output
+    ] | map(define($level; $MODE.internal)) | join("")
 );
 
 def yml2bash: (
