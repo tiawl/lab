@@ -12,7 +12,6 @@
 #   - while:  while list-1; do list-2; done
 #             while [[ expression ]]; do list-2; done
 #   - for:    for (( <expr1> ; <expr2> ; <expr3> )) ; do <list> ; done
-# - switch/case
 
 {
   function: {
@@ -53,13 +52,31 @@ def remove_useless_quotes: (
 
 def sanitize: (
   def expansion: (
+    # TODO:
     if ((has("default")) and (has("alternate"))) then (
       "You can not use \"default\" and \"alternate\" value for a same variable" | exit
     ) else . end |
     if (has("default")) then (
-      ":-" + (.default[] | sanitize)
+      ":-" + (.default | sanitize)
     ) elif (has("alternate")) then (
-      ":+" + (.alternate[] | sanitize)
+      ":+" + (.alternate | sanitize)
+    ) elif (has("replace")) then (
+      .replace |
+        if (has("all")) then (
+          "//" + (.all | sanitize) + (if (has("with")) then ("/" + (.with | sanitize)) else "" end)
+        ) elif (has("first")) then (
+          "/" + (.first | sanitize) + (if (has("with")) then ("/" + (.with | sanitize)) else "" end)
+        ) elif (has("start") and (.match == "shortest")) then (
+          "#" + (.start | sanitize)
+        ) elif (has("start") and (.match == "longest")) then (
+          "##" + (.start | sanitize)
+        ) elif (has("end") and (.match == "shortest")) then (
+          "%" + (.end | sanitize)
+        ) elif (has("end") and (.match == "longest")) then (
+          "%%" + (.end | sanitize)
+        ) else (
+          "Unknown field into \"replace\": " + (. | tostring) | exit
+        ) end
     ) else "" end
   );
 
@@ -72,6 +89,8 @@ def sanitize: (
         "*"
       ) elif (.char == "tilde") then (
         "~"
+      ) elif (.char == "newline") then (
+        "$'\\n'"
       ) else (
         "Unknown char: \"" + .char + "\"" | exit
       ) end
@@ -126,13 +145,16 @@ def op: (
   ) end
 );
 
+def raw(level; mode): (
+  if (mode == $MODE.internal) then (
+    (.raw + " " + (.args | map(sanitize) | join(" "))) | remove_useless_quotes | indent(level)
+  ) else (
+    "\"raw\" can only be used as internal user" | exit
+  ) end
+);
+
 def call(mode): (
-  . as $input |
-    if (mode == $MODE.internal) then (
-      (.call + " " + (.args | map(sanitize) | join(" "))) | remove_useless_quotes
-    ) else (
-      $PREFIX.function.internal + "call \"" + (($PREFIX.function.user + .call + " " + (.args | map(sanitize) | join(" "))) | remove_useless_quotes) + "\""
-    ) end
+  $PREFIX.function.internal + "call \"" + (($PREFIX.function.user + .call + " " + (.args | map(sanitize) | join(" "))) | remove_useless_quotes) + "\""
 );
 
 def xtrace(mode): (
@@ -383,7 +405,25 @@ def readonly(level): (
 );
 
 def print(level): (
-  ("printf '" + .print + "' " + (.args | map(sanitize) | join(" "))) | indent(level)
+  (
+    "printf '" + .print + "' " + (.args | map(sanitize) | join(" ")) + (
+      if (has("stream")) then (
+        if (.stream == "stderr") then (
+          " >&2"
+        ) else (
+          "Unknown \"stream\" field into \"print\": " + (.stream) | exit
+        ) end
+      ) else "" end
+    )
+  ) | indent(level)
+);
+
+def return(level): (
+  ("return " + (.return | tostring)) | indent(level)
+);
+
+def skip(level): (
+  (": " + (.skip | map(sanitize) | join(" "))) | indent(level)
 );
 
 def on_off(level): (
@@ -425,7 +465,7 @@ def source(level; mode): (
       ("source /proc/self/fd/0 <<< " + (.string | map(sanitize) | join(" "))) | indent(level)
     ) elif (has("from")) then (
       (if (mode != $MODE.internal) then $MODE.quiet else mode end) as $mode |
-        ("source < <(\n" | indent(level)) +
+        ("source <(\n" | indent(level)) +
         (.from | map(sourceable($mode) | indent(level + 1)) | join("\n")) + "\n" +
         (")" | indent(level))
       ) else (
@@ -505,6 +545,17 @@ def define(level; mode): (
         ) + ("fi" | indent(level))
     );
 
+    def switch(level; mode): (
+      . as $input |
+        ("case " + (.switch | sanitize) + " in\n") | indent(level) + (
+          $input.branches | map(
+            . as $branch |
+            ("( " + ($branch.pattern | sanitize) + " )\n") | indent(level) +
+            ($branch.run | map(block(level + 1; mode)) | join("\n")) + " ;;\n"
+          ) | join("")
+        ) + ("esac" | indent(level))
+    );
+
     def register(level; mode): (
       . as $input |
       (if (mode == $MODE.internal) then 0 else 1 end) as $offset |
@@ -547,6 +598,8 @@ def define(level; mode): (
       readonly(level)
     ) elif (has("if")) then (
       conditional(level; mode)
+    ) elif (has("switch")) then (
+      switch(level; mode)
     ) elif (has("defer")) then (
       defer(level; mode)
     ) elif (has("register")) then (
@@ -561,6 +614,12 @@ def define(level; mode): (
       source(level; mode)
     ) elif (has("print")) then (
       print(level)
+    ) elif (has("return")) then (
+      return(level)
+    ) elif (has("skip")) then (
+      skip(level)
+    ) elif (has("raw")) then (
+      raw(level; mode)
     ) elif (has("initialized")) then (
       $MODE.user
     ) else (
@@ -613,14 +672,14 @@ def main: (
       define: "main",
       run: (
         [
-          {call: ($PREFIX.function.internal + "init"), args: []},
+          {raw: ($PREFIX.function.internal + "init"), args: []},
           {harden: [{literal: "id"}]},
-          {register: [{call: "id", args: [[{literal: "--user"}], [{literal: "--name"}]]}], into: [{literal: "user"}]},
-          {assign: [{literal: "user"}], value: [[{var: "USER", default: [[{var: "user"}]]}]]},
-          {register: [{call: "id", args: [[{literal: "--user"}]]}], into: [{literal: "uid"}]},
-          {assign: [{literal: "uid"}], value: [[{var: "UID", default: [[{var: "uid"}]]}]]},
+          {register: [{raw: "id", args: [[{literal: "--user"}], [{literal: "--name"}]]}], into: [{literal: "user"}]},
+          {assign: [{literal: "user"}], value: [[{var: "USER", default: [{var: "user"}]}]]},
+          {register: [{raw: "id", args: [[{literal: "--user"}]]}], into: [{literal: "uid"}]},
+          {assign: [{literal: "uid"}], value: [[{var: "UID", default: [{var: "uid"}]}]]},
           {register: [{print: "%s", args: [[{char: "tilde"}]]}], into: [{literal: "home"}]},
-          {assign: [{literal: "home"}], value: [[{var: "HOME", default: [[{var: "home"}]]}]]},
+          {assign: [{literal: "home"}], value: [[{var: "HOME", default: [{var: "home"}]}]]},
           {assign: [{literal: "runner_name"}], value: [[{literal: (input_filename | sub(".*/";"") | sub("\\.yml$";""))}]]},
           {readonly: [[{literal: "user"}], [{literal: "uid"}], [{literal: "home"}], [{literal: "runner_name"}]]},
           {initialized: true}
@@ -637,23 +696,26 @@ def internals: (
         define: "init",
         run: [
           {on: [[{literal: "errexit"}], [{literal: "errtrace"}], [{literal: "noclobber"}], [{literal: "nounset"}], [{literal: "pipefail"}], [{literal: "lastpipe"}], [{literal: "extglob"}]]},
-          {call: "bash_setup", args: []},
-          {call: "load_resources", args: []},
-          {call: "init", args: []}
+          {raw: "bash_setup", args: []},
+          {raw: "load_resources", args: []},
+          {raw: "init", args: []}
         ]
       },
       {
-        define: "call2",
+        define: "call",
         run: [
-          {capture: true},
-          {on: [[{literal: "noglob"}]]},
           {
             into: [{literal: "authorized"}],
-            register: [{call: "compgen", args: [[{literal: "-A"}], [{literal: "function"}], [{literal: "-A"}], [{literal: "enabled"}]]}]
+            register: [{raw: "compgen", args: [[{literal: "-A"}], [{literal: "function"}], [{literal: "-X"}], [{literal: ("!" + $PREFIX.function.user + "*")}]]}]
           },
           {parameters: [[{var: "authorized"}], [{literal: "|"}], [{parameter: 1}]]},
-          {restore: true},
-          # TODO: case statement
+          {
+            switch: [{parameter: 2}, {parameter: 1, replace: {all: [{char: "newline"}], with: [{parameter: 2}]}}, {parameter: 2}],
+            branches: [
+              {pattern: [{char: "asterisk"}, {parameter: 2}, {parameter: 3, replace: {end: [{literal: " "}, {char: "asterisk"}], match: "longest"}}, {parameter: 2}, {char: "asterisk"}], run: [{skip: []}]},
+              {pattern: [{char: "asterisk"}], run: [{print: "Unknown \"%s\". You probably forgot to harden a command, to define a function or to enable a disabled builtin\\n", args: [[{parameter: 3}]], stream: "stderr"}, {return: 1}]}
+            ]
+          },
           {source: {from: [{print: "%s", args: [[{parameter: 3}]]}]}}
         ]
       }
@@ -663,18 +725,6 @@ def internals: (
 def yml2bash: (
   0 as $level |
     $ARGS.named.env + "\n" +
-    $PREFIX.function.internal + "call ()\n" +
-    "{\n" +
-    ("capture\n" | indent($level)) +
-    ("on noglob\n" | indent($level)) +
-    ("set -- \"$(compgen -A function -X '!" + $PREFIX.function.user + "*')\" '|' \"${1}\"\n" | indent($level)) +
-    ("restore\n" | indent($level)) +
-    ("case \"${2}${1//$'\\n'/\"${2}\"}${2}\" in\n" | indent($level)) +
-    ("( *\"${2}${3%% *}${2}\"* ) : ;;\n" | indent($level)) +
-    ("( * ) printf 'Unknown \"%s\". You probably forgot to harden a command, to define a function or to enable a disabled builtin\\n' \"${3}\" >&2; return 1 ;;\n" | indent($level)) +
-    ("esac\n" | indent($level)) +
-    ("source <(printf '%s' \"${3}\")\n" | indent($level)) +
-    "}\n" +
     $PREFIX.function.internal + "autoincr ()\n" +
     "{\n" +
     ("REPLY=1\n" | indent($level)) +

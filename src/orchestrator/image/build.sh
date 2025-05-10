@@ -33,7 +33,7 @@ image_build () { #HELP <repository> <context> [<key> <value>] [<key> <value>] [.
   tag="${tag%% *}"
   tag="${tag:0:10}"
   logged_endpoint="${logged_endpoint/"${replace_me}"/"${tag}"}"
-  endpoint="${endpoint/"${replace_me}"/"${tag}"}$(urlencode "${json}")"
+  endpoint="${endpoint/"${replace_me}"/"${tag}"}$(url encode "${json}")"
   readonly tag json logged_endpoint endpoint
 
   if not image tag defined "${repo}" "${tag}"

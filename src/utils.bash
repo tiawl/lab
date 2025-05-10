@@ -133,3 +133,22 @@ bash_setup () {
   path[docker_socket]='/var/run/docker.sock'
   readonly sep
 }
+
+url () {
+  case "${1}" in
+  ( encode )
+    local LC_ALL=C
+    local i
+    for (( i = 0; i < ${#2}; i++ ))
+    do
+      case "${2:i:1}" in
+      ( [{}:\"/?\&=] ) set -- "${1}" "${2}" "${3:-}%%%02X" "${@:4}" "'${2:i:1}" ;;
+      ( * ) set -- "${1}" "${2}" "${3:-}%c" "${@:4}" "${2:i:1}" ;;
+      esac
+    done
+    printf "${3}\n" "${@:4}" ;;
+  ( decode )
+    : "${2//+/ }"
+    printf '%b\n' "${_//%/\\x}" ;;
+  esac
+}
