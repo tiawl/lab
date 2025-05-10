@@ -92,7 +92,7 @@ def sanitize: (
         "Positional parameter only contains numeric characters" | exit
       ) end
     ) else (
-      "Unknown object type: \"" + keys[0] + "\"" | exit
+      "Unknown field object passing through sanitize(): \"" + keys[0] + "\"" | exit
     ) end
   ) | join("")
 );
@@ -122,117 +122,11 @@ def op: (
       }
     ) end
   ) else (
-    "Unknown type: \"" + type + "\"" | exit
+    "Only object JSON type are authorized through op(): \"" + type + "\"" | exit
   ) end
 );
 
-def task_image_builder(prefix): (
-  keys[0] as $key |
-    if (has("prune")) then (
-      .prune as $prune | prefix + $key
-    ) else (
-      "Unknown image builder task type: \"" + $key + "\"" | exit
-    ) end
-);
-
-def task_image_tag(prefix): (
-  keys[0] as $key |
-    if (has("defined")) then (
-      .defined as $defined | prefix + $key + " " +
-        ($defined.image | sanitize) + " " +
-        ($defined.tag | sanitize)
-    ) elif (has("create")) then (
-      .create as $create | prefix + $key + " " +
-        ($create.from.image | sanitize) + " " +
-        ($create.from.tag | sanitize) + " " +
-        ($create.to.image | sanitize) + " " +
-        ($create.to.tag | sanitize)
-    ) else (
-      "Unknown image tag task type: \"" + $key + "\"" | exit
-    ) end
-);
-
-def task_image(prefix): (
-  keys[0] as $key |
-    if (has("tag")) then (
-      .tag | task_image_tag(prefix + $key + " ")
-    ) elif (has("builder")) then (
-      .builder | task_image_builder(prefix + $key + " ")
-    ) elif (has("pull")) then (
-      .pull as $pull | prefix + $key + " " +
-        ($pull.registry | sanitize) + " " +
-        ($pull.library | sanitize) + " " +
-        ($pull.image | sanitize) + " " +
-        ($pull.tag | sanitize)
-    ) elif (has("remove")) then (
-      .remove as $remove | prefix + $key + " " +
-        ($remove.image | sanitize) + " " +
-        ($remove.tag | sanitize)
-    ) elif (has("prune")) then (
-      .prune as $prune | prefix + $key + " " +
-        ($prune.matching | sanitize)
-    ) elif (has("build")) then (
-      .build as $build | prefix + $key + " " +
-        ($build.image | sanitize) + " " +
-        ($build.context | sanitize) + " " +
-        ([$build.args[][] | sanitize] | join(" "))
-    ) else (
-      "Unknown image task type: \"" + $key + "\"" | exit
-    ) end
-);
-
-def task_container_resource(prefix): (
-  keys[0] as $key |
-    if (has("copy")) then (
-      .copy as $copy | prefix + $key + " " +
-      ($copy.name | sanitize) + " " +
-      ($copy.src | sanitize) + " " +
-      ($copy.dest | sanitize)
-    ) else (
-      "Unknown container resource task type: \"" + $key + "\"" | exit
-    ) end
-);
-
-def task_container(prefix): (
-  keys[0] as $key |
-    if (has("resource")) then (
-      .resource | task_container_resource(prefix + $key + " ")
-    ) elif (has("create")) then (
-      .create as $create | prefix + $key + " " +
-        ($create.name | sanitize) + " " +
-        ($create.image | sanitize) + " " +
-        ($create.hostname | sanitize)
-    ) elif (has("start")) then (
-      .start as $start | prefix + $key + " " +
-        ($start.name | sanitize)
-    ) elif (has("stop")) then (
-      .stop as $stop | prefix + $key + " " +
-        ($stop.name | sanitize)
-    ) else (
-      "Unknown container task type: \"" + $key + "\"" | exit
-    ) end
-);
-
-def task_network_ip(prefix): (
-  keys[0] as $key |
-    if (has("get")) then (
-      .get as $get | prefix + $key + " " +
-        ($get.container | sanitize)
-    ) else (
-      "Unknown network ip task type: \"" + $key + "\"" | exit
-    ) end
-);
-
-def task_network(prefix): (
-  keys[0] as $key |
-    if (has("ip")) then (
-      .ip | task_network_ip(prefix + $key + " ")
-    ) else (
-      "Unknown network task type: \"" + $key + "\"" | exit
-    ) end
-);
-
-def task_call(mode): (
+def call(mode): (
   . as $input |
     if (mode == $MODE.internal) then (
       (.call + " " + (.args | map(sanitize) | join(" "))) | remove_useless_quotes
@@ -241,23 +135,7 @@ def task_call(mode): (
     ) end
 );
 
-def task_print: (
-  "printf '" + .print + "' " + (.args | map(sanitize) | join(" "))
-);
-
-def task_on_off: (
-  (keys[0]) + " " + (values[] | map(sanitize) | join(" "))
-);
-
-def task_capture_restore: (
-  if (.capture or .restore) then (keys[0]) else "" end
-);
-
-def task_parameters: (
-  "set -- " + (.parameters | map(sanitize) | join(" "))
-);
-
-def xtrace_task(mode): (
+def xtrace(mode): (
   if (mode == $MODE.user) then (
     [
       $PREFIX.function.internal + "xtrace \"" + (.xtrace | remove_useless_quotes) + "\"",
@@ -270,81 +148,152 @@ def xtrace_task(mode): (
   ) end
 );
 
-# TODO: avoid repetition here
-def task(level; mode): (
-  def task_source(mode): (
-    "source " + (
-      if (type == "array") then (
-        "/proc/self/fd/0 <<< " + (.source | map(sanitize) | join(" "))
-      ) elif (type == "object") then (
-        "< <(" + (.source | task(-1; if (mode == $MODE.internal) then $MODE.internal else $MODE.quiet end) | join("; ")) + ")"
-      ) else (
-        "Unauthorized type for source task" | exit
-      ) end
-    )
-  );
+def orchestrator: {
+  image: {
+    builder: {
+      prune: (try (
+        .image.builder.prune as $prune |
+          if $prune then "image builder prune" else null end
+      ) catch null)
+    },
+    tag: {
+      defined: (try (
+        .image.tag.defined as $defined |
+          if $defined then (
+            "image tag defined " +
+              ($defined.image | sanitize) + " " +
+              ($defined.tag | sanitize)
+          ) else null end
+      ) catch null),
+      create: (try (
+        .image.tag.create as $create |
+          if $create then (
+            "image tag create " +
+              ($create.from.image | sanitize) + " " +
+              ($create.from.tag | sanitize) + " " +
+              ($create.to.image | sanitize) + " " +
+              ($create.to.tag | sanitize)
+          ) else null end
+      ) catch null)
+    },
+    pull: (try (
+      .image.pull as $pull |
+        if $pull then (
+          "image pull " +
+            ($pull.registry | sanitize) + " " +
+            ($pull.library | sanitize) + " " +
+            ($pull.image | sanitize) + " " +
+            ($pull.tag | sanitize)
+        ) else null end
+    ) catch null),
+    remove: (try (
+      .image.remove as $remove |
+        if $remove then (
+          "image remove " +
+            ($remove.image | sanitize) + " " +
+            ($remove.tag | sanitize)
+        ) else null end
+    ) catch null),
+    prune: (try (
+      .image.prune as $prune |
+        if $prune then (
+          "image prune " +
+            ($prune.matching | sanitize)
+        ) else null end
+    ) catch null),
+    build: (try (
+      .image.build as $build |
+        if $build then (
+          "image build " +
+            ($build.image | sanitize) + " " +
+            ($build.context | sanitize) + " " +
+            ([$build.args[][] | sanitize] | join(" "))
+        ) else null end
+    ) catch null)
+  },
+  container: {
+    resource: {
+      copy: (try (
+        .container.resource.copy as $copy |
+          if $copy then (
+            "container resource copy " +
+              ($copy.name | sanitize) + " " +
+              ($copy.src | sanitize) + " " +
+              ($copy.dest | sanitize)
+          ) else null end
+      ) catch null)
+    },
+    create: (try (
+      .container.create as $create |
+        if $create then (
+          "container create " +
+            ($create.name | sanitize) + " " +
+            ($create.image | sanitize) + " " +
+            ($create.hostname | sanitize)
+        ) else null end
+    ) catch null),
+    start: (try (
+      .container.start as $start |
+        if $start then (
+          "container start " +
+            ($start.name | sanitize)
+        ) else null end
+    ) catch null),
+    stop: (try (
+      .container.stop as $stop |
+        if $stop then (
+          "container stop " +
+            ($stop.name | sanitize)
+        ) else null end
+    ) catch null)
+  },
+  network: {
+    ip: {
+      get: (try (
+        .network.ip.get as $get |
+          if $get then (
+            "network ip get " +
+              ($get.container | sanitize)
+          ) else null end
+      ) catch null)
+    }
+  }
+};
 
+def traceable(level; mode): (
   if (isempty(.[])) then (
     []
   ) else (
-    keys[0] as $key |
-    if (has("image")) then (
-      .image | task_image($key + " ") as $program |
+    . as $input | ((
+      orchestrator |
+        walk(
+          if (type == "object") then (
+            with_entries(select((.value != null) and (.value | (type == "object" and length == 0) | not)))
+          ) else . end
+        ) | .. | select(type == "string")
+      ) // null) as $program |
+    if ($program | type == "string") then (
       {
         program: $program,
         xtrace: $program
       }
-    ) elif (has("container")) then (
-      .container | task_container($key + " ") as $program |
+    ) elif ($input | has("call")) then (
       {
-        program: $program,
-        xtrace: $program
-      }
-    ) elif (has("network")) then (
-      .network | task_network($key + " ") as $program |
-      {
-        program: $program,
-        xtrace: $program
-      }
-    ) elif (has("call")) then (
-      {
-        program: task_call(mode),
-        xtrace: (.call + " " + (.args | map(sanitize) | join(" ")))
-      }
-    ) elif (has("print")) then (
-      task_print as $program |
-      {
-        program: $program,
-        xtrace: $program
-      }
-    ) elif (has("parameters")) then (
-      task_parameters as $program |
-      {
-        program: $program,
-        xtrace: $program
-      }
-    ) elif ((has("on")) or (has("off"))) then (
-      task_on_off as $program |
-      {
-        program: $program,
-        xtrace: $program
-      }
-    ) elif ((has("capture")) or (has("restore"))) then (
-      task_capture_restore as $program |
-      {
-        program: $program,
-        xtrace: $program
-      }
-    ) elif (has("source")) then (
-      task_source(mode) as $program |
-      {
-        program: $program,
-        xtrace: $program
+        program: ($input | call(mode)),
+        xtrace: ($input.call + " " + ($input.args | map(sanitize) | join(" ")))
       }
     ) else (
-      "Unknown task type: \"" + $key + "\"" | exit
-    ) end | xtrace_task(mode) | map(indent(level))
+      "Unknown traceable type: \"" + ($input | tostring) + "\"" | exit
+    ) end | xtrace(mode) | map(indent(level))
   ) end
+);
+
+def deferrable(level; mode): (
+  traceable(level; mode)
+);
+
+def conditionnable(level; mode): (
+  traceable(level; mode)
 );
 
 def harden(level; mode): (
@@ -433,10 +382,26 @@ def readonly(level): (
   ("readonly " + (.readonly | map(sanitize) | join(" "))) | indent(level)
 );
 
+def print(level): (
+  ("printf '" + .print + "' " + (.args | map(sanitize) | join(" "))) | indent(level)
+);
+
+def on_off(level): (
+  ((keys[0]) + " " + (values[] | map(sanitize) | join(" "))) | indent(level)
+);
+
+def capture_restore(level): (
+  if (.capture or .restore) then (keys[0] | indent(level)) else "" end
+);
+
+def parameters(level): (
+  ("set -- " + (.parameters | map(sanitize) | join(" "))) | indent(level)
+);
+
 def defer(level; mode): (
   .defer |
   ((keys[0] | if (test("^container$|^image$|^network$|^volume$|^runner$")) then "s" else "" end) + "defer") as $fn |
-  task(-1; mode) | map(
+  deferrable(-1; mode) | map(
     gsub("'"; "'\"'\"'") | (
       if (startswith($PREFIX.function.internal + "xtrace")) then (
         "defer '"
@@ -447,13 +412,34 @@ def defer(level; mode): (
   ) | join("\n")
 );
 
+def sourceable(mode): (
+  if (has("call")) then call(mode)
+  elif (has("print")) then print(-1)
+  else ("Authorized tasks into source.from JSON array are \"call\" and \"print\"" | exit)
+  end
+);
+
+def source(level; mode): (
+  .source |
+    if (has("string")) then (
+      ("source /proc/self/fd/0 <<< " + (.string | map(sanitize) | join(" "))) | indent(level)
+    ) elif (has("from")) then (
+      (if (mode != $MODE.internal) then $MODE.quiet else mode end) as $mode |
+        ("source < <(\n" | indent(level)) +
+        (.from | map(sourceable($mode) | indent(level + 1)) | join("\n")) + "\n" +
+        (")" | indent(level))
+      ) else (
+      "Authorized fields into source JSON object are \"string\" and \"from\"" | exit
+    ) end
+);
+
 def define(level; mode): (
   def block(level; mode): (
     def conditional(level; mode): (
       def conditional_inner(level; mode): (
         # check "run" field is an array
         if ((.run | type) != "array") then (
-          "Conditional \"run\" field must an array type but it is \"" + (.run | type) + "\"" | exit
+          "Conditional \"run\" field must be an array type but it is \"" + (.run | type) + "\"" | exit
         ) else . end |
 
         . as $input |
@@ -481,7 +467,7 @@ def define(level; mode): (
             }
           ]) |
             {
-              cond: ($op.program.before + ($op.yml | task(-1; mode) | join("; ")) + $op.program.after),
+              cond: ($op.program.before + ($op.yml | conditionnable(-1; mode) | join("; ")) + $op.program.after),
               run: (map(.run) | join("\n")),
             }
       );
@@ -565,10 +551,20 @@ def define(level; mode): (
       defer(level; mode)
     ) elif (has("register")) then (
       register(level; mode)
+    ) elif (has("parameters")) then (
+      parameters(level)
+    ) elif (has("capture") or has("restore")) then (
+      capture_restore(level)
+    ) elif (has("on") or has("off")) then (
+      on_off(level)
+    ) elif (has("source")) then (
+      source(level; mode)
+    ) elif (has("print")) then (
+      print(level)
     ) elif (has("initialized")) then (
       $MODE.user
     ) else (
-      task(level; mode) | join("\n")
+      traceable(level; mode) | join("\n")
     ) end
   );
 
@@ -642,7 +638,7 @@ def internals: (
         run: [
           {on: [[{literal: "errexit"}], [{literal: "errtrace"}], [{literal: "noclobber"}], [{literal: "nounset"}], [{literal: "pipefail"}], [{literal: "lastpipe"}], [{literal: "extglob"}]]},
           {call: "bash_setup", args: []},
-          {call: "load_ressources", args: []},
+          {call: "load_resources", args: []},
           {call: "init", args: []}
         ]
       },
@@ -658,7 +654,7 @@ def internals: (
           {parameters: [[{var: "authorized"}], [{literal: "|"}], [{parameter: 1}]]},
           {restore: true},
           # TODO: case statement
-          {source: {print: "%s", args: [[{parameter: 3}]]}}
+          {source: {from: [{print: "%s", args: [[{parameter: 3}]]}]}}
         ]
       }
     ] | map(define($level; $MODE.internal)) | join("")

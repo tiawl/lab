@@ -55,7 +55,7 @@ help () {
   printf '\nCOMMANDS:\n${help}\n' >&2
 }
 
-load_ressources () {
+load_resources () {
   global -A sed jq buf
 $(on globstar
   for dir in sed jq
@@ -89,7 +89,7 @@ ${name} () {
 
   bash_setup
 
-  load_ressources
+  load_resources
 
   orchestrator "\${@}"
 }
