@@ -11,7 +11,7 @@ image_build () { #HELP <repository> <context> [<key> <value>] [<key> <value>] [.
     protoc --decode=moby.buildkit.v1.StatusResponse --descriptor_set_in=<(printf '%s' "${buf[descriptor_set_control]}" | base64 -d) --proto_path=/dev/fd <(printf '%s' "${buf[vendor_control]}")
   }
 
-  local repo context json method tag logged_endpoint endpoint replace_me
+  local repo context json method tag endpoint replace_me
   repo="${1}"
   context="${2}"
   method='POST'
@@ -24,23 +24,21 @@ image_build () { #HELP <repository> <context> [<key> <value>] [<key> <value>] [.
   curl_cmd=('curl' '--silent' '--fail' '--request' "${method}" '--unix-socket' "${path[docker_socket]}" '--data-binary' '@-' '--header' 'Content-Type: application/x-tar' '--no-buffer' '--write-out' "%{stderr}%{scheme} %{response_code}\n")
 
   json="$(gojq --monochrome-output --null-input --compact-output '[$ARGS.positional | range(length/2|ceil) as $i | .[2 * $i:2 * $i + 2] | {(first): last}] | add' --args "${@}")"
-  endpoint="http://${version[docker_api]}/build?version=2&t=${repo}${sep[tag]}${replace_me}&buildargs="
-  logged_endpoint="${endpoint}${json}"
+  endpoint="http://${version[docker_api]}/build?version=2&t=${repo}${sep[tag]}${replace_me}&buildargs=$(url encode "${json}")"
   tag="$({
     tar --directory "${context}" --create --file=- --sort=name --mtime='UTC 2019-01-01' --group=0 --owner=0 --numeric-owner .
-    printf '%s\n' "${curl_cmd[@]}" "${logged_endpoint}"
+    printf '%s\n' "${curl_cmd[@]}" "${endpoint}"
   } | sha256sum)"
   tag="${tag%% *}"
   tag="${tag:0:10}"
-  logged_endpoint="${logged_endpoint/"${replace_me}"/"${tag}"}"
-  endpoint="${endpoint/"${replace_me}"/"${tag}"}$(url encode "${json}")"
-  readonly tag json logged_endpoint endpoint
+  endpoint="${endpoint/"${replace_me}"/"${tag}"}"
+  readonly tag json endpoint
 
   if not image tag defined "${repo}" "${tag}"
   then
     image prune "${repo}${sep[tag]}*"
 
-    printf '%s %s\n' "${method}" "${logged_endpoint//\"/\\\"}" >&2
+    printf '%s %s\n' "${method}" "$(url decode "${endpoint}")" >&2
 
     local json_object http_code
     coproc HTTP_CODE { sed "${sed[colored_http_code]}"; }
