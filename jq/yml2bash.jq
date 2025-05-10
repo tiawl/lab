@@ -647,10 +647,10 @@ def internals: (
         run: [
           {capture: true},
           {on: [[{literal: "noglob"}]]},
-          #{
-          #  into: "authorized",
-          #  register: {call: "compgen", args: [[{literal: "-A"}], [{literal: "function"}], [{literal: "-A"}], [{literal: "enabled"}]]}
-          #},
+          {
+            into: [{literal: "authorized"}],
+            register: [{call: "compgen", args: [[{literal: "-A"}], [{literal: "function"}], [{literal: "-A"}], [{literal: "enabled"}]]}]
+          },
           {parameters: [[{var: "authorized"}], [{literal: "|"}], [{parameter: 1}]]},
           {restore: true},
           # TODO: case statement
