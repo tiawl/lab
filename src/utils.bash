@@ -74,9 +74,19 @@ shift
 # 1) fail if no external tool exists with the specified name
 # 2) wrap the external tool as a function
 harden () {
-  local old_ifs dir flag hardened
+  local old_ifs dir flag hardened alias reserved char
   old_ifs="${IFS}"
-  readonly old_ifs
+  alias="${2:-"${1}"}"
+  reserved="$(compgen -A keyword -A builtin)"
+  char='|'
+  readonly old_ifs alias reserved char
+
+  case "${char}${reserved//$'\n'/"${char}"}${char}" in
+  ( "${char}${alias}${char}" )
+    printf 'You can not harden or alias an Bash keyword or builtin\n' >&2
+    return 1 ;;
+  ( * ) : ;;
+  esac
 
   IFS=':'
   set -f
@@ -84,7 +94,7 @@ harden () {
   do
     if can exec "${dir}/${1}"
     then
-      source /proc/self/fd/0 <<< "${2:-"${1//-/_}"} () { ${dir}/${1} \"\${@}\"; }"
+      source /proc/self/fd/0 <<< "${alias} () { ${dir}/${1} \"\${@}\"; }"
       flag='true'
       break
     fi

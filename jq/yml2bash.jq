@@ -33,11 +33,6 @@ def is_legit: (
   test("^[a-zA-Z_][a-zA-Z0-9_]*$")
 );
 
-def is_reserved: (
-  . as $input |
-    $ARGS.named.reserved | split("\n") | any(. == $input)
-);
-
 def exit: (
   "runner: " + . + "\n" | halt_error(1)
 );
@@ -145,11 +140,12 @@ def op: (
 );
 
 def raw(level; mode): (
-  if (mode == $MODE.internal) then (
-    (.raw + " " + (.args | map(sanitize) | join(" "))) | remove_useless_quotes | indent(level)
-  ) else (
-    "\"raw\" can only be used as internal user" | exit
-  ) end
+  .raw |
+    if (mode == $MODE.internal) then (
+      (.command + " " + (.args | map(sanitize) | join(" "))) | remove_useless_quotes | indent(level)
+    ) else (
+      "\"raw\" can only be used as internal user" | exit
+    ) end
 );
 
 def call(mode): (
@@ -319,22 +315,16 @@ def conditionnable(level; mode): (
 
 def harden(level; mode): (
   (
-    "harden " + (.harden | sanitize)+ (
-      if (has("as")) then (
-        .as |
-          if (is_reserved) then (
-            "You can not use a reserved BASH word to harden a command:" + ($ARGS.named.reserved | gsub("\n"; " ")) | exit
-          ) elif (is_legit) then (
-            " " + (
-              if (mode != $MODE.internal) then (
-                $PREFIX.function.user
-              ) else "" end
-            ) + .
-          ) else (
-            bad_varname
-          ) end
+    .harden |
+    "harden " + (.command | sanitize) + (
+      if (has("as") and (.as | length > 0)) then (
+        " " + (
+          if (mode != $MODE.internal) then (
+            $PREFIX.function.user
+          ) else "" end
+        ) + (.as | sanitize)
       ) elif (mode != $MODE.internal) then (
-        " '" + $PREFIX.function.user + "'" + (.harden | sanitize) | gsub("''"; "")
+        " '" + $PREFIX.function.user + "'" + (.command | sanitize) | gsub("''"; "")
       ) else "" end
     )
   ) | indent(level)
@@ -350,7 +340,7 @@ def default_assign: (
 );
 
 def assign(level; sanitized_value): (
-  default_assign |
+  .assign | default_assign |
   if ((has("key")) and (.type != "string")) then (
     "Values into associative or indexed array must be string typed" | exit
   ) else . end |
@@ -366,7 +356,7 @@ def assign(level; sanitized_value): (
     ) elif (.scope == "local") then (
       "local "
     ) else (
-      "Unknown assign.scope: \"" + .type + "\"" | exit
+      "Unknown .assign.scope: \"" + .type + "\"" | exit
     ) end
   ) + (
     if (.type == "string") then (
@@ -378,9 +368,9 @@ def assign(level; sanitized_value): (
     ) elif (.type == "reference") then (
       "-n "
     ) else (
-      "Unknown assign.type: \"" + .type + "\"" | exit
+      "Unknown .assign.type: \"" + .type + "\"" | exit
     ) end
-  ) + (.assign | sanitize) + (
+  ) + (.name | sanitize) + (
     if (has("key")) then (
       "[" + (.key | sanitize) + "]"
     ) else "" end
@@ -405,6 +395,7 @@ def readonly(level): (
 
 def print(level): (
   (
+    .print |
     "printf " + (
       if (has("var")) then (
         if (.var | is_legit) then (
@@ -413,12 +404,12 @@ def print(level): (
           .var | bad_varname
         ) end
       ) else "" end
-    ) + "'" + .print + "' " + (.args | map(sanitize) | join(" ")) + (
-      if (has("stream")) then (
-        if (.stream == "stderr") then (
+    ) + "'" + .format + "' " + (.args | map(sanitize) | join(" ")) + (
+      if (has("to")) then (
+        if (.to == "stderr") then (
           " >&2"
         ) else (
-          "Unknown \"stream\" field into \"print\": " + (.stream) | exit
+          " >> " + .to
         ) end
       ) else "" end
     )
@@ -481,7 +472,7 @@ def source(level; mode): (
 );
 
 def define(level; mode): (
-  def block(level; mode): (
+  def tobash(level; mode): (
     def conditional(level; mode): (
       def conditional_inner(level; mode): (
         # check "run" field is an array
@@ -510,7 +501,7 @@ def define(level; mode): (
           .op as $op |
           ([
             {
-              run: ($input | .run[] | block(level + 1; mode))
+              run: ($input | .run[] | tobash(level + 1; mode))
             }
           ]) |
             {
@@ -558,31 +549,33 @@ def define(level; mode): (
           $input.branches | map(
             . as $branch |
             ("( " + ($branch.pattern | sanitize) + " )\n") | indent(level) +
-            ($branch.run | map(block(level + 1; mode)) | join("\n")) + " ;;\n"
+            ($branch.run | map(tobash(level + 1; mode)) | join("\n")) + " ;;\n"
           ) | join("")
         ) + ("esac" | indent(level))
     );
 
     def register(level; mode): (
-      . as $input |
+      .register as $input | .register |
       (if (mode == $MODE.internal) then 0 else 1 end) as $offset |
-        if (. | has("into") | not) then (
-          ".register used without .into" | exit
+        if (has("into") | not) then (
+          ".register used without .register.into" | exit
         ) else . end |
-        .register[] | block(level + $offset + 1; mode) |
+        .run[] | tobash(level + $offset + 1; mode) |
         {
-          assign: $input.into,
-          value: [
-            [
-              {
-                unsanitized: ("\"$(\n" + . + "\n" + (
-                  if (mode != $MODE.internal) then (
-                    "declare -f " + $PREFIX.function.internal + "autoincr >&3\n" | indent(level + $offset + 1)
-                  ) else "" end
-                ) + (")\"" | indent(level + $offset)))
-              }
+          assign: {
+            name: $input.into,
+            value: [
+              [
+                {
+                  unsanitized: ("\"$(\n" + . + "\n" + (
+                    if (mode != $MODE.internal) then (
+                      "declare -f " + $PREFIX.function.internal + "autoincr >&3\n" | indent(level + $offset + 1)
+                    ) else "" end
+                  ) + (")\"" | indent(level + $offset)))
+                }
+              ]
             ]
-          ]
+          }
         } | assign(level + $offset; false) |
         if (mode != $MODE.internal) then (
           ("coproc CAT { cat; }\n" | indent(level)) +
@@ -594,6 +587,15 @@ def define(level; mode): (
           ("unset source_me\n" | indent(level))
         ) else . end
     );
+
+    if (type != "object") then (
+      "Expected an object: " + (. | tostring) | exit
+    ) else . end |
+
+    # TODO:
+    #if (keys | length > 1) then (
+    #  "This object must contain a unique key: " + (. | tostring) | exit
+    #) else . end |
 
     if (has("harden")) then (
       harden(level; mode)
@@ -635,9 +637,7 @@ def define(level; mode): (
   );
 
   . as $input | .define |
-    if (is_reserved) then (
-      "You can not define a function with a reserved BASH word:" + ($ARGS.named.reserved | gsub("\n"; " ")) | exit
-    ) elif (is_legit | not) then (
+    if (is_legit | not) then (
       bad_varname
     ) else . end | ((
     if (mode == $MODE.internal) then (
@@ -652,7 +652,7 @@ def define(level; mode): (
           mode: mode
         };
         . as $foreach_input |
-        ($item | block(level + 1; $foreach_input.mode)) as $output |
+        ($item | tobash(level + 1; $foreach_input.mode)) as $output |
         if ($output | type == "string") then (
           {
             mode: $foreach_input.mode,
@@ -679,16 +679,16 @@ def main: (
       define: "main",
       run: (
         [
-          {raw: ($PREFIX.function.internal + "init"), args: []},
-          {harden: [{literal: "id"}]},
-          {register: [{raw: "id", args: [[{literal: "--user"}], [{literal: "--name"}]]}], into: [{literal: "user"}]},
-          {assign: [{literal: "user"}], value: [[{var: "USER", default: [{var: "user"}]}]]},
-          {register: [{raw: "id", args: [[{literal: "--user"}]]}], into: [{literal: "uid"}]},
-          {assign: [{literal: "uid"}], value: [[{var: "UID", default: [{var: "uid"}]}]]},
-          {assign: [{literal: "home"}]},
-          {print: "%s", var: "home", args: [[{char: "tilde"}]]},
-          {assign: [{literal: "home"}], value: [[{var: "HOME", default: [{var: "home"}]}]]},
-          {assign: [{literal: "runner_name"}], value: [[{literal: (input_filename | sub(".*/";"") | sub("\\.yml$";""))}]]},
+          {raw: {command: ($PREFIX.function.internal + "init"), args: []}},
+          {harden: {command: [{literal: "id"}]}},
+          {register: {run: [{raw: {command: "id", args: [[{literal: "--user"}], [{literal: "--name"}]]}}], into: [{literal: "user"}]}},
+          {assign: {name: [{literal: "user"}], value: [[{var: "USER", default: [{var: "user"}]}]]}},
+          {register: {run: [{raw: {command: "id", args: [[{literal: "--user"}]]}}], into: [{literal: "uid"}]}},
+          {assign: {name: [{literal: "uid"}], value: [[{var: "UID", default: [{var: "uid"}]}]]}},
+          {assign: {name: [{literal: "home"}]}},
+          {print: {format: "%s", var: "home", args: [[{char: "tilde"}]]}},
+          {assign: {name: [{literal: "home"}], value: [[{var: "HOME", default: [{var: "home"}]}]]}},
+          {assign: {name: [{literal: "runner_name"}], value: [[{literal: (input_filename | sub(".*/";"") | sub("\\.yml$";""))}]]}},
           {readonly: [[{literal: "user"}], [{literal: "uid"}], [{literal: "home"}], [{literal: "runner_name"}]]},
           {initialized: true}
         ] + $input.run
@@ -704,27 +704,29 @@ def internals: (
         define: "init",
         run: [
           {on: [[{literal: "errexit"}], [{literal: "errtrace"}], [{literal: "noclobber"}], [{literal: "nounset"}], [{literal: "pipefail"}], [{literal: "lastpipe"}], [{literal: "extglob"}]]},
-          {raw: "bash_setup", args: []},
-          {raw: "load_resources", args: []},
-          {raw: "init", args: []}
+          {raw: {command: "bash_setup", args: []}},
+          {raw: {command: "load_resources", args: []}},
+          {raw: {command: "init", args: []}}
         ]
       },
       {
         define: "call",
         run: [
           {
-            into: [{literal: "authorized"}],
-            register: [{raw: "compgen", args: [[{literal: "-A"}], [{literal: "function"}], [{literal: "-X"}], [{literal: ("!" + $PREFIX.function.user + "*")}]]}]
+            register: {
+              into: [{literal: "authorized"}],
+              run: [{raw: {command: "compgen", args: [[{literal: "-A"}], [{literal: "function"}], [{literal: "-X"}], [{literal: ("!" + $PREFIX.function.user + "*")}]]}}]
+            }
           },
           {parameters: [[{var: "authorized"}], [{literal: "|"}], [{parameter: 1}]]},
           {
             switch: [{parameter: 2}, {parameter: 1, replace: {all: [{char: "newline"}], with: [{parameter: 2}]}}, {parameter: 2}],
             branches: [
               {pattern: [{char: "asterisk"}, {parameter: 2}, {parameter: 3, replace: {end: [{literal: " "}, {char: "asterisk"}], match: "longest"}}, {parameter: 2}, {char: "asterisk"}], run: [{skip: []}]},
-              {pattern: [{char: "asterisk"}], run: [{print: "Unknown \"%s\". You probably forgot to harden a command, to define a function or to enable a disabled builtin\\n", args: [[{parameter: 3}]], stream: "stderr"}, {return: 1}]}
+              {pattern: [{char: "asterisk"}], run: [{print: {format: "Unknown \"%s\". You probably forgot to harden a command, to define a function or to enable a disabled builtin\\n", args: [[{parameter: 3}]], to: "stderr"}}, {return: 1}]}
             ]
           },
-          {source: {from: [{print: "%s", args: [[{parameter: 3}]]}]}}
+          {source: {from: [{print: {format: "%s", args: [[{parameter: 3}]]}}]}}
         ]
       }
     ] | map(define($level; $MODE.internal)) | join("")

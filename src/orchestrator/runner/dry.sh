@@ -31,5 +31,5 @@ runner_dry () { #HELP <yaml_file>\t\t\t\t\t\t\tDisplay the runner bash script wi
         defer sdefer harden \
         shuffle \
         readl source
-    )" --arg reserved "$(compgen -A keyword -A builtin)"
+    )"
 }
