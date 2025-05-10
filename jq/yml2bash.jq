@@ -52,9 +52,8 @@ def remove_useless_quotes: (
 
 def sanitize: (
   def expansion: (
-    # TODO:
-    if ((has("default")) and (has("alternate"))) then (
-      "You can not use \"default\" and \"alternate\" value for a same variable" | exit
+    if ([has("default"), has("alternate"), has("replace")] | map(if . then 1 else 0 end) | add == 2) then (
+      "You can only use one of \"default\", \"alternate\" or \"replace\" fields for a same variable" | exit
     ) else . end |
     if (has("default")) then (
       ":-" + (.default | sanitize)
@@ -406,7 +405,15 @@ def readonly(level): (
 
 def print(level): (
   (
-    "printf '" + .print + "' " + (.args | map(sanitize) | join(" ")) + (
+    "printf " + (
+      if (has("var")) then (
+        if (.var | is_legit) then (
+          "-v " + .var + " "
+        ) else (
+          .var | bad_varname
+        ) end
+      ) else "" end
+    ) + "'" + .print + "' " + (.args | map(sanitize) | join(" ")) + (
       if (has("stream")) then (
         if (.stream == "stderr") then (
           " >&2"
@@ -678,7 +685,8 @@ def main: (
           {assign: [{literal: "user"}], value: [[{var: "USER", default: [{var: "user"}]}]]},
           {register: [{raw: "id", args: [[{literal: "--user"}]]}], into: [{literal: "uid"}]},
           {assign: [{literal: "uid"}], value: [[{var: "UID", default: [{var: "uid"}]}]]},
-          {register: [{print: "%s", args: [[{char: "tilde"}]]}], into: [{literal: "home"}]},
+          {assign: [{literal: "home"}]},
+          {print: "%s", var: "home", args: [[{char: "tilde"}]]},
           {assign: [{literal: "home"}], value: [[{var: "HOME", default: [{var: "home"}]}]]},
           {assign: [{literal: "runner_name"}], value: [[{literal: (input_filename | sub(".*/";"") | sub("\\.yml$";""))}]]},
           {readonly: [[{literal: "user"}], [{literal: "uid"}], [{literal: "home"}], [{literal: "runner_name"}]]},

@@ -138,15 +138,17 @@ url () {
   case "${1}" in
   ( encode )
     local LC_ALL=C
-    local i
+    local i reply encoded
     for (( i = 0; i < ${#2}; i++ ))
     do
-      case "${2:i:1}" in
-      ( [{}:\"/?\&=] ) set -- "${1}" "${2}" "${3:-}%%%02X" "${@:4}" "'${2:i:1}" ;;
-      ( * ) set -- "${1}" "${2}" "${3:-}%c" "${@:4}" "${2:i:1}" ;;
+      : "${2:i:1}"
+      case "${_}" in
+      ( [a-zA-Z0-9.~_-] ) printf -v reply '%c' "${_}" ;;
+      ( * ) printf -v reply '%%%02X' "'${_}" ;;
       esac
+      encoded="${encoded:-}${reply}"
     done
-    printf "${3}\n" "${@:4}" ;;
+    printf '%s\n' "${encoded}" ;;
   ( decode )
     : "${2//+/ }"
     printf '%b\n' "${_//%/\\x}" ;;
