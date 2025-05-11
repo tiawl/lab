@@ -6,7 +6,6 @@
 #   - and
 #   - or
 #   - [[ ]]
-# - arith
 # - loop:
 #   - in:     for <name> [ [ in [ <word> ... ] ] ; ] do <list>; done
 #   - while:  while list-1; do list-2; done
@@ -45,9 +44,24 @@ def remove_useless_quotes: (
   gsub("\""; "'") | gsub("''"; "")
 );
 
+def among(k): (
+  . as $input |
+    reduce k[] as $item (0; . + ($input | if has($item) then 1 else 0 end))
+);
+
+def is_unique_key_object: (
+  if (type != "object") then (
+    "Expected an object: " + (. | tostring) | exit
+  ) else . end |
+
+  if (keys | length > 1) then (
+    "This object must contain a unique key: " + (. | tostring) | exit
+  ) else . end
+);
+
 def sanitize: (
   def expansion: (
-    if ([has("default"), has("alternate"), has("replace")] | map(if . then 1 else 0 end) | add == 2) then (
+    if (among(["default", "alternate", "replace"]) == 2) then (
       "You can only use one of \"default\", \"alternate\" or \"replace\" fields for a same variable" | exit
     ) else . end |
     if (has("default")) then (
@@ -105,10 +119,10 @@ def sanitize: (
         $input.var | bad_varname
       ) end
     ) elif (has("parameter")) then (
-      if (.parameter | tostring | test("^[0-9]+$")) then (
+      if (.parameter | type == "number") then (
         "\"${" + (.parameter | tostring) + ($input | expansion) + "}\""
       ) else (
-        "Positional parameter only contains numeric characters" | exit
+        "Positional parameter must be number typed" | exit
       ) end
     ) else (
       "Unknown field object passing through sanitize(): \"" + keys[0] + "\"" | exit
@@ -333,15 +347,15 @@ def assign(level; sanitized_value): (
     ) else "" end
   ) + (
     if (has("value")) then (
-      .value[] |
-        if (sanitized_value) then (
-          sanitize |
-          if (($input.type == "indexed") or ($input.type == "associative")) then (
-            "( " + . + " )"
-          ) else . end
+      if (sanitized_value) then (
+        if (($input.type == "indexed") or ($input.type == "associative")) then (
+          ("'('" + (.value | map(sanitize) | join("' '")) + "')'") | gsub("''"; "")
         ) else (
-          .[0].unsanitized
-        ) end | "=" + .
+          .value[0] | sanitize
+        ) end
+      ) else (
+        .value[][0].unsanitized
+      ) end | "=" + .
     ) else "" end
   ) | indent(level)
 );
@@ -391,6 +405,42 @@ def capture_restore(level): (
 
 def parameters(level): (
   ("set -- " + (.parameters | map(sanitize) | join(" "))) | indent(level)
+);
+
+def arithmetic(level): (
+  def arithmetic_inner: (
+    def arithmetic_op: (
+      if (.op == "add") then (
+        "+"
+      ) elif (.op == "modulo") then (
+        "%"
+      ) else (
+        "Unknown arithmetic operand: " + . | exit
+      ) end
+    );
+
+    def arithmetic_side: (
+      is_unique_key_object |
+
+      if ((has("parameter")) or (has("var"))) then (
+        [.] | sanitize
+      ) elif (has("number")) then (
+        if (.number | type == "number") then (
+          .number | tostring
+        ) else (
+          ".number arithmetic side must be number typed" | exit
+        ) end
+      ) elif (has("arithmetic")) then (
+        .arithmetic | arithmetic_inner
+      ) else (
+        "Unknown arithmetic side: " + (. | tostring) | exit
+      ) end
+    );
+
+    "( " + (.left | arithmetic_side) + " " + (arithmetic_op) + " " + (.right | arithmetic_side) + " )"
+  );
+
+  ("(" + (.arithmetic | arithmetic_inner) + ")") | indent(level)
 );
 
 def define(level; mode): (
@@ -575,41 +625,58 @@ def define(level; mode): (
         if (has("into") | not) then (
           ".register used without .register.into" | exit
         ) else . end |
-        .run[] | tobash(level + $offset + 1; mode) |
-        {
-          assign: {
-            name: $input.into,
-            value: [
-              [
-                {
-                  unsanitized: ("\"$(\n" + . + "\n" + (
-                    if (mode != $MODE.internal) then (
-                      "declare -f " + $PREFIX.function.internal + "autoincr >&3\n" | indent(level + $offset + 1)
-                    ) else "" end
-                  ) + (")\"" | indent(level + $offset)))
-                }
+        if (among(["run", "arithmetic"]) == 2) then (
+          "You can only use one of \"run\" or \"arithmetic\" fields into register" | exit
+        ) else . end |
+        if (has("run")) then (
+          .run[] | tobash(level + $offset + 1; mode) |
+          {
+            assign: {
+              name: $input.into,
+              value: [
+                [
+                  {
+                    unsanitized: ("\"$(\n" + . + "\n" + (
+                      if (mode != $MODE.internal) then (
+                        "declare -f " + $PREFIX.function.internal + "autoincr >&3\n" | indent(level + $offset + 1)
+                      ) else "" end
+                    ) + (")\"" | indent(level + $offset)))
+                  }
+                ]
               ]
-            ]
-          }
-        } | assign(level + $offset; false) |
-        if (mode != $MODE.internal) then (
-          ("coproc CAT { cat; }\n" | indent(level)) +
-          ("{\n" | indent(level)) + . + "\n" +
-          ("} 3>&${CAT[1]}\n" | indent(level)) +
-          ("exec {CAT[1]}>&-\n" | indent(level)) +
-          ("mapfile source_me <&${CAT[0]}\n" | indent(level)) +
-          ("source /proc/self/fd/0 <<< \"${source_me[@]}\"\n" | indent(level)) +
-          ("unset source_me\n" | indent(level))
-        ) else . end
+            }
+          } | assign(level + $offset; false) |
+          if (mode != $MODE.internal) then (
+            # TODO
+            ("coproc CAT { cat; }\n" | indent(level)) +
+            ("{\n" | indent(level)) + . + "\n" +
+            ("} 3>&${CAT[1]}\n" | indent(level)) +
+            ("exec {CAT[1]}>&-\n" | indent(level)) +
+            # TODO
+            ("mapfile source_me <&${CAT[0]}\n" | indent(level)) +
+            ("source /proc/self/fd/0 <<< \"${source_me[@]}\"\n" | indent(level)) +
+            ("unset source_me\n" | indent(level))
+          ) else . end
+        ) elif (has("arithmetic")) then (
+          arithmetic(-1) |
+          {
+            assign: {
+              name: $input.into,
+              value: [
+                [
+                  {
+                    unsanitized: ("\"$" + . + "\"")
+                  }
+                ]
+              ]
+            }
+          } | assign(level + $offset; false)
+        ) else (
+          "Authorized fields into register are: arithmetic and run" | exit
+        ) end
     );
 
-    if (type != "object") then (
-      "Expected an object: " + (. | tostring) | exit
-    ) else . end |
-
-    if (keys | length > 1) then (
-      "This object must contain a unique key: " + (. | tostring) | exit
-    ) else . end |
+    is_unique_key_object |
 
     if (has("harden")) then (
       harden(level; mode)
@@ -635,6 +702,8 @@ def define(level; mode): (
       on_off(level)
     ) elif (has("source")) then (
       source(level; mode)
+    ) elif (has("arithmetic")) then (
+      arithmetic(level)
     ) elif (has("print")) then (
       print(level)
     ) elif (has("return")) then (
@@ -760,6 +829,16 @@ def internals: (
             {source: {string: [[{var: "fn"}]]}}
           ]
         }
+      },
+      {
+        define: {
+          name: "color",
+          run: [
+            {register: {into: [{literal: "i"}], arithmetic: {left: {arithmetic: {left: {parameter: 1}, op: "modulo", right: {number: ($ARGS.positional | length)}}}, op: "add", right: {number: 1}}}},
+            {assign: {name: [{literal: "colors"}], type: "indexed", value: ($ARGS.positional | map([{literal: .}]))}},
+            {assign: {name: [{literal: "REPLY"}], value: [[{var: "colors", key: [{var: "i"}]}]], scope: "global"}}
+          ]
+        }
       }
     ] | map(define($level; $MODE.internal)) | join("")
 );
@@ -767,11 +846,6 @@ def internals: (
 def yml2bash: (
   0 as $level |
     $ARGS.named.env + "\n" +
-    $PREFIX.function.internal + "color ()\n" +
-    "{\n" +
-    ("set -- \"$(( (${1} % " + ($ARGS.positional | length | tostring) + ") + 2 ))\" " + ($ARGS.positional | join(" ")) + "\n" | indent($level)) +
-    ("REPLY=\"${!1}\"\n" | indent($level)) +
-    "}\n" +
     $PREFIX.function.internal + "xtrace ()\n" +
     "{\n" +
     ($PREFIX.function.internal + "autoincr\n" | indent($level)) +
