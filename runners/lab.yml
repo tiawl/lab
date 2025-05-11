@@ -278,18 +278,20 @@ run:
     - literal: bounce_ip
 - readonly:
   - - literal: bounce_ip
-- call: ssh_keygen
-  args:
-  - - literal: -R
-  - - var: bounce_ip
-- call: ssh
-  args:
-  - - literal: -i
-  - - var: path
-      key:
-      - literal: ssh_home
-    - literal: /
-    - var: key_name
-  - - var: user
-    - literal: '@'
-    - var: bounce_ip
+- call:
+    command: ssh_keygen
+    args:
+    - - literal: -R
+    - - var: bounce_ip
+- call:
+    command: ssh
+    args:
+    - - literal: -i
+    - - var: path
+        key:
+        - literal: ssh_home
+      - literal: /
+      - var: key_name
+    - - var: user
+      - literal: '@'
+      - var: bounce_ip

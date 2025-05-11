@@ -93,6 +93,12 @@ def sanitize: (
         "\"${" + .var + (
           if ($input | has("key")) then (
             "[" + ($input.key | sanitize) + "]"
+          ) elif ($input | has("index")) then (
+            if ($input.index | type == "number") then (
+              "[" + ($input.index | tostring) + "]"
+            ) else (
+              "The .var.index must be number typed" | exit
+            ) end
           ) else "" end
         ) + ($input | expansion) + "}\""
       ) else (
@@ -137,19 +143,6 @@ def op: (
   ) else (
     "Only object JSON type are authorized through op(): \"" + type + "\"" | exit
   ) end
-);
-
-def raw(level; mode): (
-  .raw |
-    if (mode == $MODE.internal) then (
-      (.command + " " + (.args | map(sanitize) | join(" "))) | remove_useless_quotes | indent(level)
-    ) else (
-      "\"raw\" can only be used as internal user" | exit
-    ) end
-);
-
-def call(mode): (
-  $PREFIX.function.internal + "call \"" + (($PREFIX.function.user + .call + " " + (.args | map(sanitize) | join(" "))) | remove_useless_quotes) + "\""
 );
 
 def xtrace(mode): (
@@ -277,42 +270,6 @@ def orchestrator: {
   }
 };
 
-def traceable(level; mode): (
-  if (isempty(.[])) then (
-    []
-  ) else (
-    . as $input | ((
-      orchestrator |
-        walk(
-          if (type == "object") then (
-            with_entries(select((.value != null) and (.value | (type == "object" and length == 0) | not)))
-          ) else . end
-        ) | .. | select(type == "string")
-      ) // null) as $program |
-    if ($program | type == "string") then (
-      {
-        program: $program,
-        xtrace: $program
-      }
-    ) elif ($input | has("call")) then (
-      {
-        program: ($input | call(mode)),
-        xtrace: ($input.call + " " + ($input.args | map(sanitize) | join(" ")))
-      }
-    ) else (
-      "Unknown traceable type: \"" + ($input | tostring) + "\"" | exit
-    ) end | xtrace(mode) | map(indent(level))
-  ) end
-);
-
-def deferrable(level; mode): (
-  traceable(level; mode)
-);
-
-def conditionnable(level; mode): (
-  traceable(level; mode)
-);
-
 def harden(level; mode): (
   (
     .harden |
@@ -436,43 +393,91 @@ def parameters(level): (
   ("set -- " + (.parameters | map(sanitize) | join(" "))) | indent(level)
 );
 
-def defer(level; mode): (
-  .defer |
-  ((keys[0] | if (test("^container$|^image$|^network$|^volume$|^runner$")) then "s" else "" end) + "defer") as $fn |
-  deferrable(-1; mode) | map(
-    gsub("'"; "'\"'\"'") | (
-      if (startswith($PREFIX.function.internal + "xtrace")) then (
-        "defer '"
-      ) else (
-        $fn + " '"
-      ) end
-    ) + . + "'" | indent(level)
-  ) | join("\n")
-);
-
-def sourceable(mode): (
-  if (has("call")) then call(mode)
-  elif (has("print")) then print(-1)
-  else ("Authorized tasks into source.from JSON array are \"call\" and \"print\"" | exit)
-  end
-);
-
-def source(level; mode): (
-  .source |
-    if (has("string")) then (
-      ("source /proc/self/fd/0 <<< " + (.string | map(sanitize) | join(" "))) | indent(level)
-    ) elif (has("from")) then (
-      (if (mode != $MODE.internal) then $MODE.quiet else mode end) as $mode |
-        ("source <(\n" | indent(level)) +
-        (.from | map(sourceable($mode) | indent(level + 1)) | join("\n")) + "\n" +
-        (")" | indent(level))
-      ) else (
-      "Authorized fields into source JSON object are \"string\" and \"from\"" | exit
-    ) end
-);
-
 def define(level; mode): (
   def tobash(level; mode): (
+    def switch(level; mode): (
+      .switch as $input | .switch |
+        ("case " + (.evaluate | sanitize) + " in\n") | indent(level) + (
+          $input.branches | map(
+            . as $branch |
+            ("( " + ($branch.pattern | sanitize) + " )\n") | indent(level) +
+            ($branch.run | map(tobash(level + 1; mode)) | join("\n")) + " ;;\n"
+          ) | join("")
+        ) + ("esac" | indent(level))
+    );
+
+    def raw(level; mode): (
+      .raw |
+        if (mode == $MODE.internal) then (
+          (.command + " " + (.args | map(sanitize) | join(" ")) + (
+            if (has("pipe")) then (
+              " | " + (.pipe | tobash(-1; mode))
+            ) else "" end
+          )) | indent(level)
+        ) else (
+          "\"raw\" can only be used as internal user" | exit
+        ) end
+    );
+
+    def call(mode): (
+      .call |
+        $PREFIX.function.internal + "call \"" + (($PREFIX.function.user + .command + " " + (.args | map(sanitize) | join(" "))) | remove_useless_quotes) + (
+          if (has("pipe")) then (
+            " | " + (.pipe | tobash(-1; mode))
+          ) else "" end
+        ) + "\""
+    );
+
+    def traceable(level; mode): (
+      if (isempty(.[])) then (
+        []
+      ) else (
+        . as $input | ((
+          orchestrator |
+            walk(
+              if (type == "object") then (
+                with_entries(select((.value != null) and (.value | (type == "object" and length == 0) | not)))
+              ) else . end
+            ) | .. | select(type == "string")
+          ) // null) as $program |
+        if ($program | type == "string") then (
+          {
+            program: $program,
+            xtrace: $program
+          }
+        ) elif ($input | has("call")) then (
+          {
+            program: ($input | call(mode)),
+            xtrace: ($input.call.command + " " + ($input.call.args | map(sanitize) | join(" ")))
+          }
+        ) else (
+          "Unknown traceable type: \"" + ($input | tostring) + "\"" | exit
+        ) end | xtrace(mode) | map(indent(level))
+      ) end
+    );
+
+    def deferrable(level; mode): (
+      traceable(level; mode)
+    );
+
+    def defer(level; mode): (
+      .defer |
+      ((keys[0] | if (test("^container$|^image$|^network$|^volume$|^runner$")) then "s" else "" end) + "defer") as $fn |
+      deferrable(-1; mode) | map(
+        gsub("'"; "'\"'\"'") | (
+          if (startswith($PREFIX.function.internal + "xtrace")) then (
+            "defer '"
+          ) else (
+            $fn + " '"
+          ) end
+        ) + . + "'" | indent(level)
+      ) | join("\n")
+    );
+
+    def conditionnable(level; mode): (
+      traceable(level; mode)
+    );
+
     def conditional(level; mode): (
       def conditional_inner(level; mode): (
         # check "run" field is an array
@@ -543,15 +548,25 @@ def define(level; mode): (
         ) + ("fi" | indent(level))
     );
 
-    def switch(level; mode): (
-      . as $input |
-        ("case " + (.switch | sanitize) + " in\n") | indent(level) + (
-          $input.branches | map(
-            . as $branch |
-            ("( " + ($branch.pattern | sanitize) + " )\n") | indent(level) +
-            ($branch.run | map(tobash(level + 1; mode)) | join("\n")) + " ;;\n"
-          ) | join("")
-        ) + ("esac" | indent(level))
+    def sourceable(mode): (
+      if (has("call")) then call(mode)
+      elif (has("print")) then print(-1)
+      else ("Authorized tasks into source.from JSON array are \"call\" and \"print\"" | exit)
+      end
+    );
+
+    def source(level; mode): (
+      .source |
+        if (has("string")) then (
+          ("source /proc/self/fd/0 <<< " + (.string | map(sanitize) | join(" "))) | indent(level)
+        ) elif (has("from")) then (
+          (if (mode != $MODE.internal) then $MODE.quiet else mode end) as $mode |
+            ("source <(\n" | indent(level)) +
+            (.from | map(sourceable($mode) | indent(level + 1)) | join("\n")) + "\n" +
+            (")" | indent(level))
+          ) else (
+          "Authorized fields into source JSON object are \"string\" and \"from\"" | exit
+        ) end
     );
 
     def register(level; mode): (
@@ -592,10 +607,9 @@ def define(level; mode): (
       "Expected an object: " + (. | tostring) | exit
     ) else . end |
 
-    # TODO:
-    #if (keys | length > 1) then (
-    #  "This object must contain a unique key: " + (. | tostring) | exit
-    #) else . end |
+    if (keys | length > 1) then (
+      "This object must contain a unique key: " + (. | tostring) | exit
+    ) else . end |
 
     if (has("harden")) then (
       harden(level; mode)
@@ -636,15 +650,15 @@ def define(level; mode): (
     ) end
   );
 
-  . as $input | .define |
-    if (is_legit | not) then (
+  .define as $input | .define |
+    if (.name | is_legit | not) then (
       bad_varname
     ) else . end | ((
     if (mode == $MODE.internal) then (
       $PREFIX.function.internal
     ) else (
       $PREFIX.function.user
-    ) end + . + " ()\n") | indent(level)) + (
+    ) end + .name + " ()\n") | indent(level)) + (
     "{\n" | indent(level)) + (
     [
       foreach $input.run[] as $item (
@@ -676,23 +690,25 @@ def main: (
   -1 as $level |
     . as $input |
     {
-      define: "main",
-      run: (
-        [
-          {raw: {command: ($PREFIX.function.internal + "init"), args: []}},
-          {harden: {command: [{literal: "id"}]}},
-          {register: {run: [{raw: {command: "id", args: [[{literal: "--user"}], [{literal: "--name"}]]}}], into: [{literal: "user"}]}},
-          {assign: {name: [{literal: "user"}], value: [[{var: "USER", default: [{var: "user"}]}]]}},
-          {register: {run: [{raw: {command: "id", args: [[{literal: "--user"}]]}}], into: [{literal: "uid"}]}},
-          {assign: {name: [{literal: "uid"}], value: [[{var: "UID", default: [{var: "uid"}]}]]}},
-          {assign: {name: [{literal: "home"}]}},
-          {print: {format: "%s", var: "home", args: [[{char: "tilde"}]]}},
-          {assign: {name: [{literal: "home"}], value: [[{var: "HOME", default: [{var: "home"}]}]]}},
-          {assign: {name: [{literal: "runner_name"}], value: [[{literal: (input_filename | sub(".*/";"") | sub("\\.yml$";""))}]]}},
-          {readonly: [[{literal: "user"}], [{literal: "uid"}], [{literal: "home"}], [{literal: "runner_name"}]]},
-          {initialized: true}
-        ] + $input.run
-      )
+      define: {
+        name: "main",
+        run: (
+          [
+            {raw: {command: ($PREFIX.function.internal + "init"), args: []}},
+            {harden: {command: [{literal: "id"}]}},
+            {register: {run: [{raw: {command: "id", args: [[{literal: "--user"}], [{literal: "--name"}]]}}], into: [{literal: "user"}]}},
+            {assign: {name: [{literal: "user"}], value: [[{var: "USER", default: [{var: "user"}]}]]}},
+            {register: {run: [{raw: {command: "id", args: [[{literal: "--user"}]]}}], into: [{literal: "uid"}]}},
+            {assign: {name: [{literal: "uid"}], value: [[{var: "UID", default: [{var: "uid"}]}]]}},
+            {assign: {name: [{literal: "home"}]}},
+            {print: {format: "%s", var: "home", args: [[{char: "tilde"}]]}},
+            {assign: {name: [{literal: "home"}], value: [[{var: "HOME", default: [{var: "home"}]}]]}},
+            {assign: {name: [{literal: "runner_name"}], value: [[{literal: (input_filename | sub(".*/";"") | sub("\\.yml$";""))}]]}},
+            {readonly: [[{literal: "user"}], [{literal: "uid"}], [{literal: "home"}], [{literal: "runner_name"}]]},
+            {initialized: true}
+          ] + $input.run
+        )
+      }
     } | define($level; $MODE.internal)
 );
 
@@ -701,33 +717,49 @@ def internals: (
   -1 as $level |
     [
       {
-        define: "init",
-        run: [
-          {on: [[{literal: "errexit"}], [{literal: "errtrace"}], [{literal: "noclobber"}], [{literal: "nounset"}], [{literal: "pipefail"}], [{literal: "lastpipe"}], [{literal: "extglob"}]]},
-          {raw: {command: "bash_setup", args: []}},
-          {raw: {command: "load_resources", args: []}},
-          {raw: {command: "init", args: []}}
-        ]
+        define: {
+          name: "init",
+          run: [
+            {on: [[{literal: "errexit"}], [{literal: "errtrace"}], [{literal: "noclobber"}], [{literal: "nounset"}], [{literal: "pipefail"}], [{literal: "lastpipe"}], [{literal: "extglob"}]]},
+            {raw: {command: "bash_setup", args: []}},
+            {raw: {command: "load_resources", args: []}},
+            {raw: {command: "init", args: []}}
+          ]
+        }
       },
       {
-        define: "call",
-        run: [
-          {
-            register: {
-              into: [{literal: "authorized"}],
-              run: [{raw: {command: "compgen", args: [[{literal: "-A"}], [{literal: "function"}], [{literal: "-X"}], [{literal: ("!" + $PREFIX.function.user + "*")}]]}}]
-            }
-          },
-          {parameters: [[{var: "authorized"}], [{literal: "|"}], [{parameter: 1}]]},
-          {
-            switch: [{parameter: 2}, {parameter: 1, replace: {all: [{char: "newline"}], with: [{parameter: 2}]}}, {parameter: 2}],
-            branches: [
-              {pattern: [{char: "asterisk"}, {parameter: 2}, {parameter: 3, replace: {end: [{literal: " "}, {char: "asterisk"}], match: "longest"}}, {parameter: 2}, {char: "asterisk"}], run: [{skip: []}]},
-              {pattern: [{char: "asterisk"}], run: [{print: {format: "Unknown \"%s\". You probably forgot to harden a command, to define a function or to enable a disabled builtin\\n", args: [[{parameter: 3}]], to: "stderr"}}, {return: 1}]}
-            ]
-          },
-          {source: {from: [{print: {format: "%s", args: [[{parameter: 3}]]}}]}}
-        ]
+        define: {
+          name: "call",
+          run: [
+            {
+              register: {
+                into: [{literal: "authorized"}],
+                run: [{raw: {command: "compgen", args: [[{literal: "-A"}], [{literal: "function"}], [{literal: "-X"}], [{literal: ("!" + $PREFIX.function.user + "*")}]]}}]
+              }
+            },
+            {parameters: [[{var: "authorized"}], [{literal: "|"}], [{parameter: 1}]]},
+            {
+              switch: {
+                evaluate: [{parameter: 2}, {parameter: 1, replace: {all: [{char: "newline"}], with: [{parameter: 2}]}}, {parameter: 2}],
+                branches: [
+                  {pattern: [{char: "asterisk"}, {parameter: 2}, {parameter: 3, replace: {end: [{literal: " "}, {char: "asterisk"}], match: "longest"}}, {parameter: 2}, {char: "asterisk"}], run: [{skip: []}]},
+                  {pattern: [{char: "asterisk"}], run: [{print: {format: "Unknown \"%s\". You probably forgot to harden a command, to define a function or to enable a disabled builtin\\n", args: [[{parameter: 3}]], to: "stderr"}}, {return: 1}]}
+                ]
+              }
+            },
+            {source: {from: [{print: {format: "%s", args: [[{parameter: 3}]]}}]}}
+          ]
+        }
+      },
+      {
+        define: {
+          name: "autoincr",
+          run: [
+            {assign: {name: [{literal: "REPLY"}], value: [[{literal: "1"}]], scope: "global"}},
+            {register: {into: [{literal: "fn"}], run: [{raw: {command: "declare", args: [[{literal: "-f"}], [{var: "FUNCNAME", index: 0}]], pipe: {raw: {command: "sed", args: [[{var: "sed", key: [{literal: "autoincr"}]}]]}}}}]}},
+            {source: {string: [[{var: "fn"}]]}}
+          ]
+        }
       }
     ] | map(define($level; $MODE.internal)) | join("")
 );
@@ -735,11 +767,6 @@ def internals: (
 def yml2bash: (
   0 as $level |
     $ARGS.named.env + "\n" +
-    $PREFIX.function.internal + "autoincr ()\n" +
-    "{\n" +
-    ("REPLY=1\n" | indent($level)) +
-    ("source /proc/self/fd/0 <<< \"$(declare -f \"${FUNCNAME[0]}\" | sed \"${sed[autoincr]}\")\"\n" | indent($level)) +
-    "}\n" +
     $PREFIX.function.internal + "color ()\n" +
     "{\n" +
     ("set -- \"$(( (${1} % " + ($ARGS.positional | length | tostring) + ") + 2 ))\" " + ($ARGS.positional | join(" ")) + "\n" | indent($level)) +
