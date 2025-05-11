@@ -1,4 +1,4 @@
-run:
+group:
 - harden:
     command:
     - literal: ssh
@@ -71,7 +71,7 @@ run:
             - key:
               - literal: alpine
               var: version
-    run:
+    group:
     - image:
         pull:
           image:
@@ -265,7 +265,7 @@ run:
           - literal: container
         - literal: bounce
 - register:
-    run:
+    group:
     - network:
         ip:
           get:

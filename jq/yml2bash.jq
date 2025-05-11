@@ -444,314 +444,316 @@ def arithmetic(level): (
 );
 
 def define(level; mode): (
-  def tobash(level; mode): (
-    def switch(level; mode): (
-      .switch as $input | .switch |
-        ("case " + (.evaluate | sanitize) + " in\n") | indent(level) + (
-          $input.branches | map(
-            . as $branch |
-            ("( " + ($branch.pattern | sanitize) + " )\n") | indent(level) +
-            ($branch.run | map(tobash(level + 1; mode)) | join("\n")) + " ;;\n"
-          ) | join("")
-        ) + ("esac" | indent(level))
-    );
+  def group(level; mode): (
+    def command(level; mode): (
+      def switch(level; mode): (
+        .switch as $input | .switch |
+          ("case " + (.evaluate | sanitize) + " in\n") | indent(level) + (
+            $input.branches | map(
+              . as $branch |
+              ("( " + ($branch.pattern | sanitize) + " ) ") | indent(level) +
+              ($branch | group(level; mode)) + " ;;\n"
+            ) | join("")
+          ) + ("esac" | indent(level))
+      );
 
-    def raw(level; mode): (
-      .raw |
-        if (mode == $MODE.internal) then (
-          (.command + " " + (.args | map(sanitize) | join(" ")) + (
+      def raw(level; mode): (
+        .raw |
+          if (mode == $MODE.internal) then (
+            (.command + " " + (.args | map(sanitize) | join(" ")) + (
+              if (has("pipe")) then (
+                " | " + (.pipe | command(-1; mode))
+              ) else "" end
+            )) | indent(level)
+          ) else (
+            "\"raw\" can only be used as internal user" | exit
+          ) end
+      );
+
+      def call(mode): (
+        .call |
+          $PREFIX.function.internal + "call \"" + (($PREFIX.function.user + .command + " " + (.args | map(sanitize) | join(" "))) | remove_useless_quotes) + (
             if (has("pipe")) then (
-              " | " + (.pipe | tobash(-1; mode))
+              " | " + (.pipe | command(-1; mode))
             ) else "" end
-          )) | indent(level)
+          ) + "\""
+      );
+
+      def traceable(level; mode): (
+        if (isempty(.[])) then (
+          []
         ) else (
-          "\"raw\" can only be used as internal user" | exit
+          . as $input | ((
+            orchestrator |
+              walk(
+                if (type == "object") then (
+                  with_entries(select((.value != null) and (.value | (type == "object" and length == 0) | not)))
+                ) else . end
+              ) | .. | select(type == "string")
+            ) // null) as $program |
+          if ($program | type == "string") then (
+            {
+              program: $program,
+              xtrace: $program
+            }
+          ) elif ($input | has("call")) then (
+            {
+              program: ($input | call(mode)),
+              xtrace: ($input.call.command + " " + ($input.call.args | map(sanitize) | join(" ")))
+            }
+          ) else (
+            "Unknown traceable type: \"" + ($input | tostring) + "\"" | exit
+          ) end | xtrace(mode) | map(indent(level))
         ) end
-    );
+      );
 
-    def call(mode): (
-      .call |
-        $PREFIX.function.internal + "call \"" + (($PREFIX.function.user + .command + " " + (.args | map(sanitize) | join(" "))) | remove_useless_quotes) + (
-          if (has("pipe")) then (
-            " | " + (.pipe | tobash(-1; mode))
-          ) else "" end
-        ) + "\""
-    );
+      def deferrable(level; mode): (
+        traceable(level; mode)
+      );
 
-    def traceable(level; mode): (
-      if (isempty(.[])) then (
-        []
+      def defer(level; mode): (
+        .defer |
+        ((keys[0] | if (test("^container$|^image$|^network$|^volume$|^runner$")) then "s" else "" end) + "defer") as $fn |
+        deferrable(-1; mode) | map(
+          gsub("'"; "'\"'\"'") | (
+            if (startswith($PREFIX.function.internal + "xtrace")) then (
+              "defer '"
+            ) else (
+              $fn + " '"
+            ) end
+          ) + . + "'" | indent(level)
+        ) | join("\n")
+      );
+
+      def conditionable(level; mode): (
+        traceable(level; mode)
+      );
+
+      def conditional(level; mode): (
+        def conditional_inner(level; mode): (
+          # check "group" field is an array
+          if ((.group | type) != "array") then (
+            "Conditional \"group\" field must be an array type but it is \"" + (.group | type) + "\"" | exit
+          ) else . end |
+
+          . as $input |
+            # "else" case
+            if ((type == "object") and (keys | length == 1) and (keys[0] == "group")) then (
+              {
+                op: {
+                  program: {
+                    before: "",
+                    after: ""
+                  },
+                  yml: {}
+                },
+              }
+            # "if" and "elif" cases
+            ) else (
+              {
+                op: ($input | op),
+              }
+            ) end | .op as $op |
+              {
+                cond: ($op.program.before + ($op.yml | conditionable(-1; mode) | join("; ")) + $op.program.after),
+                group: ($input | group(level; mode)),
+              }
+        );
+
+        .if | . as $input |
+        if (has("group") | not) then (
+          ".if used without .if.group" | exit
+        ) else . end |
+        {
+          if: conditional_inner(level; mode),
+          else: []
+        } as $output | $input |
+          if (has("else")) then (
+            $output | setpath(["else"]; .else + [
+              $input.else[] | conditional_inner(level; mode)
+            ])
+          ) else (
+            $output
+          ) end |
+          (("if " + .if.cond + "; then ") | indent(level)) +
+          .if.group + (
+            if (.else | length > 0) then (
+              .else | map(
+                (
+                  if (.cond | length > 0) then (
+                    " elif " + .cond + "; then "
+                  ) else (
+                    " else "
+                  ) end
+                ) + .group
+              ) | join("")
+            ) else "" end
+          ) + " fi"
+      );
+
+      def sourceable(mode): (
+        if (has("call")) then call(mode)
+        elif (has("print")) then print(-1)
+        else ("Authorized tasks into source.from JSON array are \"call\" and \"print\"" | exit)
+        end
+      );
+
+      def source(level; mode): (
+        .source |
+          if (has("string")) then (
+            ("source /proc/self/fd/0 <<< " + (.string | map(sanitize) | join(" "))) | indent(level)
+          ) elif (has("from")) then (
+            (if (mode != $MODE.internal) then $MODE.quiet else mode end) as $mode |
+              ("source <(\n" | indent(level)) +
+              (.from | map(sourceable($mode) | indent(level + 1)) | join("\n")) + "\n" +
+              (")" | indent(level))
+            ) else (
+            "Authorized fields into source JSON object are \"string\" and \"from\"" | exit
+          ) end
+      );
+
+      def register(level; mode): (
+        .register as $input | .register |
+        (if (mode == $MODE.internal) then 0 else 1 end) as $offset |
+          if (has("into") | not) then (
+            ".register used without .register.into" | exit
+          ) else . end |
+          if (among(["group", "arithmetic"]) == 2) then (
+            "You can only use one of \"group\" or \"arithmetic\" fields into register" | exit
+          ) else . end |
+          if (has("group")) then (
+            group(level + $offset; mode) |
+            {
+              assign: {
+                name: $input.into,
+                value: [
+                  [
+                    {
+                      unsanitized: (
+                        "\"$(" + . + "; " + (
+                          if (mode != $MODE.internal) then (
+                            "declare -f " + $PREFIX.function.internal + "autoincr >&3"
+                          ) else "" end
+                        ) + ")\""
+                      )
+                    }
+                  ]
+                ]
+              }
+            } | assign(level + $offset; false) |
+            if (mode != $MODE.internal) then (
+              # TODO
+              ("coproc CAT { cat; }\n" | indent(level)) +
+              ("{\n" | indent(level)) + . + "\n" +
+              ("} 3>&${CAT[1]}\n" | indent(level)) +
+              ("exec {CAT[1]}>&-\n" | indent(level)) +
+              # TODO
+              ("mapfile source_me <&${CAT[0]}\n" | indent(level)) +
+              ("source /proc/self/fd/0 <<< \"${source_me[@]}\"\n" | indent(level)) +
+              ("unset source_me\n" | indent(level))
+            ) else . end
+          ) elif (has("arithmetic")) then (
+            arithmetic(-1) |
+            {
+              assign: {
+                name: $input.into,
+                value: [
+                  [
+                    {
+                      unsanitized: ("\"$" + . + "\"")
+                    }
+                  ]
+                ]
+              }
+            } | assign(level + $offset; false)
+          ) else (
+            "Authorized fields into register are: arithmetic and group" | exit
+          ) end
+      );
+
+      is_unique_key_object |
+
+      if (has("harden")) then (
+        harden(level; mode)
+      ) elif (has("assign")) then (
+        assign(level; true)
+      ) elif (has("define")) then (
+        define(level; mode)
+      ) elif (has("readonly")) then (
+        readonly(level)
+      ) elif (has("if")) then (
+        conditional(level; mode)
+      ) elif (has("switch")) then (
+        switch(level; mode)
+      ) elif (has("defer")) then (
+        defer(level; mode)
+      ) elif (has("register")) then (
+        register(level; mode)
+      ) elif (has("parameters")) then (
+        parameters(level)
+      ) elif (has("capture") or has("restore")) then (
+        capture_restore(level)
+      ) elif (has("on") or has("off")) then (
+        on_off(level)
+      ) elif (has("source")) then (
+        source(level; mode)
+      ) elif (has("arithmetic")) then (
+        arithmetic(level)
+      ) elif (has("print")) then (
+        print(level)
+      ) elif (has("return")) then (
+        return(level)
+      ) elif (has("skip")) then (
+        skip(level)
+      ) elif (has("raw")) then (
+        raw(level; mode)
+      ) elif (has("initialized")) then (
+        $MODE.user
       ) else (
-        . as $input | ((
-          orchestrator |
-            walk(
-              if (type == "object") then (
-                with_entries(select((.value != null) and (.value | (type == "object" and length == 0) | not)))
-              ) else . end
-            ) | .. | select(type == "string")
-          ) // null) as $program |
-        if ($program | type == "string") then (
-          {
-            program: $program,
-            xtrace: $program
-          }
-        ) elif ($input | has("call")) then (
-          {
-            program: ($input | call(mode)),
-            xtrace: ($input.call.command + " " + ($input.call.args | map(sanitize) | join(" ")))
-          }
-        ) else (
-          "Unknown traceable type: \"" + ($input | tostring) + "\"" | exit
-        ) end | xtrace(mode) | map(indent(level))
+        traceable(level; mode) | join("\n")
       ) end
     );
 
-    def deferrable(level; mode): (
-      traceable(level; mode)
-    );
-
-    def defer(level; mode): (
-      .defer |
-      ((keys[0] | if (test("^container$|^image$|^network$|^volume$|^runner$")) then "s" else "" end) + "defer") as $fn |
-      deferrable(-1; mode) | map(
-        gsub("'"; "'\"'\"'") | (
-          if (startswith($PREFIX.function.internal + "xtrace")) then (
-            "defer '"
-          ) else (
-            $fn + " '"
-          ) end
-        ) + . + "'" | indent(level)
-      ) | join("\n")
-    );
-
-    def conditionnable(level; mode): (
-      traceable(level; mode)
-    );
-
-    def conditional(level; mode): (
-      def conditional_inner(level; mode): (
-        # check "run" field is an array
-        if ((.run | type) != "array") then (
-          "Conditional \"run\" field must be an array type but it is \"" + (.run | type) + "\"" | exit
-        ) else . end |
-
-        . as $input |
-          # "else" case
-          if ($input | ((type == "object") and (keys | length == 1) and (keys[0] == "run"))) then (
-            {
-              op: {
-                program: {
-                  before: "",
-                  after: ""
-                },
-                yml: {}
-              },
-            }
-          # "if" and "elif" case
-          ) else (
-            {
-              op: ($input | op),
-            }
-          ) end |
-          .op as $op |
-          ([
-            {
-              run: ($input | .run[] | tobash(level + 1; mode))
-            }
-          ]) |
-            {
-              cond: ($op.program.before + ($op.yml | conditionnable(-1; mode) | join("; ")) + $op.program.after),
-              run: (map(.run) | join("\n")),
-            }
-      );
-
-      . as $input |
-      if (.if | has("run") | not) then (
-        ".if used without .if.run" | exit
-      ) else . end |
-      ($input.if | conditional_inner(level; mode)) as $if |
-      {
-        if: $if,
-        else: []
-      } as $output |
-        $input |
-        if (has("else")) then (
-          $output | setpath(["else"]; .else + [
-            $input.else[] | conditional_inner(level; mode)
-          ])
-        ) else (
-          $output
-        ) end |
-        (("if " + .if.cond + "; then\n") | indent(level)) +
-        .if.run + "\n" + (
-          if (.else | length > 0) then (
-            .else | map(
-              (
-                if (.cond | length > 0) then (
-                  (("elif " + .cond + "; then\n") | indent(level))
-                ) else (
-                  "else\n" | indent(level)
-                ) end
-              ) + .run
-            ) | join("\n") + "\n"
-          ) else "" end
-        ) + ("fi" | indent(level))
-    );
-
-    def sourceable(mode): (
-      if (has("call")) then call(mode)
-      elif (has("print")) then print(-1)
-      else ("Authorized tasks into source.from JSON array are \"call\" and \"print\"" | exit)
-      end
-    );
-
-    def source(level; mode): (
-      .source |
-        if (has("string")) then (
-          ("source /proc/self/fd/0 <<< " + (.string | map(sanitize) | join(" "))) | indent(level)
-        ) elif (has("from")) then (
-          (if (mode != $MODE.internal) then $MODE.quiet else mode end) as $mode |
-            ("source <(\n" | indent(level)) +
-            (.from | map(sourceable($mode) | indent(level + 1)) | join("\n")) + "\n" +
-            (")" | indent(level))
-          ) else (
-          "Authorized fields into source JSON object are \"string\" and \"from\"" | exit
-        ) end
-    );
-
-    def register(level; mode): (
-      .register as $input | .register |
-      (if (mode == $MODE.internal) then 0 else 1 end) as $offset |
-        if (has("into") | not) then (
-          ".register used without .register.into" | exit
-        ) else . end |
-        if (among(["run", "arithmetic"]) == 2) then (
-          "You can only use one of \"run\" or \"arithmetic\" fields into register" | exit
-        ) else . end |
-        if (has("run")) then (
-          .run[] | tobash(level + $offset + 1; mode) |
-          {
-            assign: {
-              name: $input.into,
-              value: [
-                [
-                  {
-                    unsanitized: ("\"$(\n" + . + "\n" + (
-                      if (mode != $MODE.internal) then (
-                        "declare -f " + $PREFIX.function.internal + "autoincr >&3\n" | indent(level + $offset + 1)
-                      ) else "" end
-                    ) + (")\"" | indent(level + $offset)))
-                  }
-                ]
-              ]
-            }
-          } | assign(level + $offset; false) |
-          if (mode != $MODE.internal) then (
-            # TODO
-            ("coproc CAT { cat; }\n" | indent(level)) +
-            ("{\n" | indent(level)) + . + "\n" +
-            ("} 3>&${CAT[1]}\n" | indent(level)) +
-            ("exec {CAT[1]}>&-\n" | indent(level)) +
-            # TODO
-            ("mapfile source_me <&${CAT[0]}\n" | indent(level)) +
-            ("source /proc/self/fd/0 <<< \"${source_me[@]}\"\n" | indent(level)) +
-            ("unset source_me\n" | indent(level))
-          ) else . end
-        ) elif (has("arithmetic")) then (
-          arithmetic(-1) |
-          {
-            assign: {
-              name: $input.into,
-              value: [
-                [
-                  {
-                    unsanitized: ("\"$" + . + "\"")
-                  }
-                ]
-              ]
-            }
-          } | assign(level + $offset; false)
-        ) else (
-          "Authorized fields into register are: arithmetic and run" | exit
-        ) end
-    );
-
-    is_unique_key_object |
-
-    if (has("harden")) then (
-      harden(level; mode)
-    ) elif (has("assign")) then (
-      assign(level; true)
-    ) elif (has("define")) then (
-      define(level; mode)
-    ) elif (has("readonly")) then (
-      readonly(level)
-    ) elif (has("if")) then (
-      conditional(level; mode)
-    ) elif (has("switch")) then (
-      switch(level; mode)
-    ) elif (has("defer")) then (
-      defer(level; mode)
-    ) elif (has("register")) then (
-      register(level; mode)
-    ) elif (has("parameters")) then (
-      parameters(level)
-    ) elif (has("capture") or has("restore")) then (
-      capture_restore(level)
-    ) elif (has("on") or has("off")) then (
-      on_off(level)
-    ) elif (has("source")) then (
-      source(level; mode)
-    ) elif (has("arithmetic")) then (
-      arithmetic(level)
-    ) elif (has("print")) then (
-      print(level)
-    ) elif (has("return")) then (
-      return(level)
-    ) elif (has("skip")) then (
-      skip(level)
-    ) elif (has("raw")) then (
-      raw(level; mode)
-    ) elif (has("initialized")) then (
-      $MODE.user
-    ) else (
-      traceable(level; mode) | join("\n")
-    ) end
-  );
-
-  .define as $input | .define |
-    if (.name | is_legit | not) then (
-      bad_varname
-    ) else . end | ((
-    if (mode == $MODE.internal) then (
-      $PREFIX.function.internal
-    ) else (
-      $PREFIX.function.user
-    ) end + .name + " ()\n") | indent(level)) + (
-    "{\n" | indent(level)) + (
-    [
-      foreach $input.run[] as $item (
+    (
+      "{\n"
+    ) + (
+      reduce .group[] as $item (
         {
-          mode: mode
+          mode: mode,
+          output: []
         };
-        . as $foreach_input |
-        ($item | tobash(level + 1; $foreach_input.mode)) as $output |
+        . as $reduce_input |
+        ($item | command(level + 1; $reduce_input.mode)) as $output |
         if ($output | type == "string") then (
           {
-            mode: $foreach_input.mode,
-            extract: $output
+            mode: $reduce_input.mode,
+            output: ($reduce_input.output + (if ($output | length == 0) then [] else [$output] end))
           }
         ) elif ($output | type == "number") then (
           {
             mode: $output,
-            extract: ""
+            output: $reduce_input.output
           }
-        ) end;
-        .extract as $extract |
-        if ($extract | length == 0) then empty else $extract end
-      )
-    ] | join("\n")) + "\n" + (
-    "}\n" | indent(level))
+        ) end
+      ) | .output | join("\n")
+    ) + "\n" + (
+      "}" | indent(level)
+    )
+  );
+
+  .define |
+    (group(level; mode)) as $group |
+    if (.name | is_legit | not) then (
+      bad_varname
+    ) else . end | (
+      (
+        if (mode == $MODE.internal) then (
+          $PREFIX.function.internal
+        ) else (
+          $PREFIX.function.user
+        ) end + .name + " ()\n"
+      ) | indent(level)
+    ) + $group + "\n"
 );
 
 def main: (
@@ -761,13 +763,13 @@ def main: (
     {
       define: {
         name: "main",
-        run: (
+        group: (
           [
             {raw: {command: ($PREFIX.function.internal + "init"), args: []}},
             {harden: {command: [{literal: "id"}]}},
-            {register: {run: [{raw: {command: "id", args: [[{literal: "--user"}], [{literal: "--name"}]]}}], into: [{literal: "user"}]}},
+            {register: {group: [{raw: {command: "id", args: [[{literal: "--user"}], [{literal: "--name"}]]}}], into: [{literal: "user"}]}},
             {assign: {name: [{literal: "user"}], value: [[{var: "USER", default: [{var: "user"}]}]]}},
-            {register: {run: [{raw: {command: "id", args: [[{literal: "--user"}]]}}], into: [{literal: "uid"}]}},
+            {register: {group: [{raw: {command: "id", args: [[{literal: "--user"}]]}}], into: [{literal: "uid"}]}},
             {assign: {name: [{literal: "uid"}], value: [[{var: "UID", default: [{var: "uid"}]}]]}},
             {assign: {name: [{literal: "home"}]}},
             {print: {format: "%s", var: "home", args: [[{char: "tilde"}]]}},
@@ -775,7 +777,7 @@ def main: (
             {assign: {name: [{literal: "runner_name"}], value: [[{literal: (input_filename | sub(".*/";"") | sub("\\.yml$";""))}]]}},
             {readonly: [[{literal: "user"}], [{literal: "uid"}], [{literal: "home"}], [{literal: "runner_name"}]]},
             {initialized: true}
-          ] + $input.run
+          ] + $input.group
         )
       }
     } | define($level; $MODE.internal)
@@ -788,7 +790,7 @@ def internals: (
       {
         define: {
           name: "init",
-          run: [
+          group: [
             {on: [[{literal: "errexit"}], [{literal: "errtrace"}], [{literal: "noclobber"}], [{literal: "nounset"}], [{literal: "pipefail"}], [{literal: "lastpipe"}], [{literal: "extglob"}]]},
             {raw: {command: "bash_setup", args: []}},
             {raw: {command: "load_resources", args: []}},
@@ -799,11 +801,11 @@ def internals: (
       {
         define: {
           name: "call",
-          run: [
+          group: [
             {
               register: {
                 into: [{literal: "authorized"}],
-                run: [{raw: {command: "compgen", args: [[{literal: "-A"}], [{literal: "function"}], [{literal: "-X"}], [{literal: ("!" + $PREFIX.function.user + "*")}]]}}]
+                group: [{raw: {command: "compgen", args: [[{literal: "-A"}], [{literal: "function"}], [{literal: "-X"}], [{literal: ("!" + $PREFIX.function.user + "*")}]]}}]
               }
             },
             {parameters: [[{var: "authorized"}], [{literal: "|"}], [{parameter: 1}]]},
@@ -811,21 +813,20 @@ def internals: (
               switch: {
                 evaluate: [{parameter: 2}, {parameter: 1, replace: {all: [{char: "newline"}], with: [{parameter: 2}]}}, {parameter: 2}],
                 branches: [
-                  {pattern: [{char: "asterisk"}, {parameter: 2}, {parameter: 3, replace: {end: [{literal: " "}, {char: "asterisk"}], match: "longest"}}, {parameter: 2}, {char: "asterisk"}], run: [{skip: []}]},
-                  {pattern: [{char: "asterisk"}], run: [{print: {format: "Unknown \"%s\". You probably forgot to harden a command, to define a function or to enable a disabled builtin\\n", args: [[{parameter: 3}]], to: "stderr"}}, {return: 1}]}
+                  {pattern: [{char: "asterisk"}, {parameter: 2}, {parameter: 3, replace: {end: [{literal: " "}, {char: "asterisk"}], match: "longest"}}, {parameter: 2}, {char: "asterisk"}], group: [{source: {from: [{print: {format: "%s", args: [[{parameter: 3}]]}}]}}]},
+                  {pattern: [{char: "asterisk"}], group: [{print: {format: "Unknown \"%s\". You probably forgot to harden a command, to define a function or to enable a disabled builtin\\n", args: [[{parameter: 3}]], to: "stderr"}}, {return: 1}]}
                 ]
               }
-            },
-            {source: {from: [{print: {format: "%s", args: [[{parameter: 3}]]}}]}}
+            }
           ]
         }
       },
       {
         define: {
           name: "autoincr",
-          run: [
+          group: [
             {assign: {name: [{literal: "REPLY"}], value: [[{literal: "1"}]], scope: "global"}},
-            {register: {into: [{literal: "fn"}], run: [{raw: {command: "declare", args: [[{literal: "-f"}], [{var: "FUNCNAME", index: 0}]], pipe: {raw: {command: "sed", args: [[{var: "sed", key: [{literal: "autoincr"}]}]]}}}}]}},
+            {register: {into: [{literal: "fn"}], group: [{raw: {command: "declare", args: [[{literal: "-f"}], [{var: "FUNCNAME", index: 0}]], pipe: {raw: {command: "sed", args: [[{var: "sed", key: [{literal: "autoincr"}]}]]}}}}]}},
             {source: {string: [[{var: "fn"}]]}}
           ]
         }
@@ -833,7 +834,7 @@ def internals: (
       {
         define: {
           name: "color",
-          run: [
+          group: [
             {register: {into: [{literal: "i"}], arithmetic: {left: {arithmetic: {left: {parameter: 1}, op: "modulo", right: {number: ($ARGS.positional | length)}}}, op: "add", right: {number: 1}}}},
             {assign: {name: [{literal: "colors"}], type: "indexed", value: ($ARGS.positional | map([{literal: .}]))}},
             {assign: {name: [{literal: "REPLY"}], value: [[{var: "colors", key: [{var: "i"}]}]], scope: "global"}}
