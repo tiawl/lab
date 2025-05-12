@@ -1,101 +1,162 @@
 group:
-- harden:
-    command:
-    - literal: ssh
-- harden:
-    command:
-    - literal: ssh-keygen
-    as:
-    - literal: ssh_keygen
-- assign:
-    name:
-    - literal: loc
-    type: associative
-- assign:
-    name:
-    - literal: project
-    type: associative
-- assign:
-    name:
-    - literal: version
-    type: associative
-- assign:
-    name:
-    - literal: path
-    type: associative
-- assign:
-    name:
-    - literal: loc
-    key:
-    - literal: image
-    value:
-    - - literal: local
-      - key:
-        - literal: image
-        special: sep
-- assign:
-    name:
-    - literal: project
-    key:
-    - literal: container
-    value:
-    - - special: RUNNER
-      - key:
-        - literal: container
-        special: sep
-- assign:
-    name:
-    - literal: project
-    key:
-    - literal: image
-    value:
-    - - special: RUNNER
-      - key:
-        - literal: image
-        special: sep
-- assign:
-    name:
-    - literal: version
-    key:
-    - literal: alpine
-    value:
-    - - literal: "3.21"
-    scope: global
-- readonly:
-  - - literal: loc
-- readonly:
-  - - literal: project
-- if:
-    not:
+  commands:
+  - harden:
+      command:
+      - literal: ssh
+  - harden:
+      command:
+      - literal: ssh-keygen
+      as:
+      - literal: ssh_keygen
+  - assign:
+      name:
+      - literal: loc
+      type: associative
+  - assign:
+      name:
+      - literal: project
+      type: associative
+  - assign:
+      name:
+      - literal: version
+      type: associative
+  - assign:
+      name:
+      - literal: path
+      type: associative
+  - assign:
+      name:
+      - literal: loc
+      key:
+      - literal: image
+      value:
+      - - literal: local
+        - key:
+          - literal: image
+          special: sep
+  - assign:
+      name:
+      - literal: project
+      key:
+      - literal: container
+      value:
+      - - special: RUNNER
+        - key:
+          - literal: container
+          special: sep
+  - assign:
+      name:
+      - literal: project
+      key:
+      - literal: image
+      value:
+      - - special: RUNNER
+        - key:
+          - literal: image
+          special: sep
+  - assign:
+      name:
+      - literal: version
+      key:
+      - literal: alpine
+      value:
+      - - literal: "3.21"
+      scope: global
+  - readonly:
+    - - literal: loc
+  - readonly:
+    - - literal: project
+  - if:
+      not:
+        group:
+          commands:
+          - image:
+              tag:
+                defined:
+                  image:
+                  - key:
+                    - literal: image
+                    var: loc
+                  - literal: alpine
+                  tag:
+                  - key:
+                    - literal: alpine
+                    var: version
       group:
-      - image:
-          tag:
-            defined:
+        commands:
+        - image:
+            pull:
               image:
+              - literal: alpine
+              library:
+              - literal: library
+              registry:
+              - literal: docker.io
+              tag:
+              - key:
+                - literal: alpine
+                var: version
+        - image:
+            prune:
+              matching:
               - key:
                 - literal: image
                 var: loc
+              - literal: alpine
+              - key:
+                - literal: tag
+                special: sep
+              - literal: '*'
+        - image:
+            tag:
+              create:
+                from:
+                  image:
+                  - literal: alpine
+                  tag:
+                  - key:
+                    - literal: alpine
+                    var: version
+                to:
+                  image:
+                  - key:
+                    - literal: image
+                    var: loc
+                  - literal: alpine
+                  tag:
+                  - key:
+                    - literal: alpine
+                    var: version
+        - image:
+            remove:
+              image:
               - literal: alpine
               tag:
               - key:
                 - literal: alpine
                 var: version
-    group:
-    - image:
-        pull:
-          image:
-          - literal: alpine
-          library:
-          - literal: library
-          registry:
-          - literal: docker.io
-          tag:
-          - key:
-            - literal: alpine
-            var: version
-    - image:
-        prune:
-          matching:
+  - assign:
+      name:
+      - literal: ssh_home
+      value:
+      - - literal: /home/
+        - special: USER
+        - literal: /.ssh
+  - readonly:
+    - - literal: ssh_home
+  - assign:
+      name:
+      - literal: key_name
+      value:
+      - - literal: host2lab
+  - readonly:
+    - - literal: key_name
+  - image:
+      build:
+        args:
+        - key:
+          - literal: FROM
+          value:
           - key:
             - literal: image
             var: loc
@@ -103,204 +164,147 @@ group:
           - key:
             - literal: tag
             special: sep
-          - literal: '*'
-    - image:
-        tag:
-          create:
-            from:
-              image:
-              - literal: alpine
-              tag:
-              - key:
-                - literal: alpine
-                var: version
-            to:
-              image:
-              - key:
-                - literal: image
-                var: loc
-              - literal: alpine
-              tag:
-              - key:
-                - literal: alpine
-                var: version
-    - image:
-        remove:
-          image:
-          - literal: alpine
-          tag:
           - key:
             - literal: alpine
             var: version
-- assign:
-    name:
-    - literal: ssh_home
-    value:
-    - - literal: /home/
-      - special: USER
-      - literal: /.ssh
-- readonly:
-  - - literal: ssh_home
-- assign:
-    name:
-    - literal: key_name
-    value:
-    - - literal: host2lab
-- readonly:
-  - - literal: key_name
-- image:
-    build:
-      args:
-      - key:
-        - literal: FROM
-        value:
+        - key:
+          - literal: KEY_NAME
+          value:
+          - var: key_name
+        - key:
+          - literal: USER
+          value:
+          - special: USER
+        - key:
+          - literal: SSH_HOME
+          value:
+          - var: ssh_home
+        - key:
+          - literal: UID
+          value:
+          - special: UID
+        context:
+        - literal: ./dockerfiles/bounce
+        image:
         - key:
           - literal: image
-          var: loc
-        - literal: alpine
-        - key:
-          - literal: tag
-          special: sep
-        - key:
-          - literal: alpine
-          var: version
-      - key:
-        - literal: KEY_NAME
-        value:
+          var: project
+        - literal: bounce
+  - assign:
+      name:
+      - literal: path
+      key:
+      - literal: bounce_ssh_key
+      value:
+      - - var: ssh_home
+        - literal: /
         - var: key_name
-      - key:
-        - literal: USER
-        value:
-        - special: USER
-      - key:
-        - literal: SSH_HOME
-        value:
-        - var: ssh_home
-      - key:
-        - literal: UID
-        value:
-        - special: UID
-      context:
-      - literal: ./dockerfiles/bounce
-      image:
-      - key:
-        - literal: image
-        var: project
-      - literal: bounce
-- assign:
-    name:
-    - literal: path
-    key:
-    - literal: bounce_ssh_key
-    value:
-    - - var: ssh_home
-      - literal: /
-      - var: key_name
-    scope: global
-- assign:
-    name:
-    - literal: path
-    key:
-    - literal: ssh_home
-    value:
-    - - var: ssh_home
-    scope: global
-- readonly:
-  - - literal: path
-- container:
-    create:
+      scope: global
+  - assign:
       name:
-      - var: project
-        key:
-        - literal: container
-      - literal: bounce
-      image:
-      - var: project
-        key:
-        - literal: image
-      - literal: bounce
-      hostname:
-      - literal: bounce
-- defer:
-    image:
-      builder:
-        prune: true
-- container:
-    resource:
-      copy:
+      - literal: path
+      key:
+      - literal: ssh_home
+      value:
+      - - var: ssh_home
+      scope: global
+  - readonly:
+    - - literal: path
+  - container:
+      create:
         name:
         - var: project
           key:
           - literal: container
         - literal: bounce
-        src:
-        - var: path
+        image:
+        - var: project
           key:
-          - literal: bounce_ssh_key
-        dest:
-        - var: path
+          - literal: image
+        - literal: bounce
+        hostname:
+        - literal: bounce
+  - defer:
+      image:
+        builder:
+          prune: true
+  - container:
+      resource:
+        copy:
+          name:
+          - var: project
+            key:
+            - literal: container
+          - literal: bounce
+          src:
+          - var: path
+            key:
+            - literal: bounce_ssh_key
+          dest:
+          - var: path
+            key:
+            - literal: ssh_home
+  - container:
+      resource:
+        copy:
+          name:
+          - var: project
+            key:
+            - literal: container
+          - literal: bounce
+          src:
+          - var: path
+            key:
+            - literal: bounce_ssh_key
+          - literal: .pub
+          dest:
+          - var: path
+            key:
+            - literal: ssh_home
+  - container:
+      start:
+        name:
+        - var: project
+          key:
+          - literal: container
+        - literal: bounce
+  - defer:
+      container:
+        stop:
+          name:
+          - var: project
+            key:
+            - literal: container
+          - literal: bounce
+  - register:
+      group:
+        commands:
+        - network:
+            ip:
+              get:
+                container:
+                - var: project
+                  key:
+                  - literal: container
+                - literal: bounce
+      into:
+      - literal: bounce_ip
+  - readonly:
+    - - literal: bounce_ip
+  - call:
+      command: ssh_keygen
+      args:
+      - - literal: -R
+      - - var: bounce_ip
+  - call:
+      command: ssh
+      args:
+      - - literal: -i
+      - - var: path
           key:
           - literal: ssh_home
-- container:
-    resource:
-      copy:
-        name:
-        - var: project
-          key:
-          - literal: container
-        - literal: bounce
-        src:
-        - var: path
-          key:
-          - literal: bounce_ssh_key
-        - literal: .pub
-        dest:
-        - var: path
-          key:
-          - literal: ssh_home
-- container:
-    start:
-      name:
-      - var: project
-        key:
-        - literal: container
-      - literal: bounce
-- defer:
-    container:
-      stop:
-        name:
-        - var: project
-          key:
-          - literal: container
-        - literal: bounce
-- register:
-    group:
-    - network:
-        ip:
-          get:
-            container:
-            - var: project
-              key:
-              - literal: container
-            - literal: bounce
-    into:
-    - literal: bounce_ip
-- readonly:
-  - - literal: bounce_ip
-- call:
-    command: ssh_keygen
-    args:
-    - - literal: -R
-    - - var: bounce_ip
-- call:
-    command: ssh
-    args:
-    - - literal: -i
-    - - var: path
-        key:
-        - literal: ssh_home
-      - literal: /
-      - var: key_name
-    - - special: USER
-      - literal: '@'
-      - var: bounce_ip
+        - literal: /
+        - var: key_name
+      - - special: USER
+        - literal: '@'
+        - var: bounce_ip
