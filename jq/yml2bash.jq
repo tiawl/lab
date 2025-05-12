@@ -442,15 +442,15 @@ def arithmetic(level; mode): (
 );
 
 def define(level; mode): (
-  def group(level; mode; join_strategy): (
-    def command(level; mode; joined_with): (
+  def group(level; mode; multiline): (
+    def command(level; mode; multiline): (
       def switch(level; mode): (
         .switch as $input | .switch |
           ("case " + (.evaluate | sanitize(mode)) + " in\n") | indent(level) + (
             $input.branches | map(
               . as $branch |
               ("( " + ($branch.pattern | sanitize(mode)) + " ) ") | indent(level) +
-              ($branch | group(level; mode; "newline")) + " ;;\n"
+              ($branch | group(level; mode; true)) + " ;;\n"
             ) | join("")
           ) + ("esac" | indent(level))
       );
@@ -460,7 +460,7 @@ def define(level; mode): (
           if (mode == $MODE.internal) then (
             (.command + " " + (.args | map(sanitize(mode)) | join(" ")) + (
               if (has("pipe")) then (
-                " | " + (.pipe | command(-1; mode; "\n"))
+                " | " + (.pipe | command(-1; mode; false))
               ) else "" end
             )) | indent(level)
           ) else (
@@ -472,7 +472,7 @@ def define(level; mode): (
         .call |
           $NAMESPACE.internal + "call \"" + (($NAMESPACE.user + .command + " " + (.args | map(sanitize(mode)) | join(" "))) | remove_useless_quotes) + (
             if (has("pipe")) then (
-              " | " + (.pipe | command(-1; mode; "\n"))
+              " | " + (.pipe | command(-1; mode; false))
             ) else "" end
           ) + "\""
       );
@@ -536,7 +536,7 @@ def define(level; mode): (
               if (has("not")) then (
                 "{ ! " + (.not | conditional_op(mode)) + "; }"
               ) else (
-                group($NOINDENT; mode; "oneline")
+                group($NOINDENT; mode; false)
               ) end
             ) else (
               "Only object JSON type are authorized through conditional_op(): \"" + type + "\"" | exit
@@ -553,7 +553,7 @@ def define(level; mode): (
                 conditional_op(mode)
               ) end
             ),
-            group: group(level; mode; "newline"),
+            group: group(level; mode; true),
           }
         );
 
@@ -619,7 +619,7 @@ def define(level; mode): (
             "You can only use one of \"group\", \"arithmetic\" or \"split\" fields into register" | exit
           ) else . end |
           if (has("group")) then (
-            group(level | incr_indent_level($offset); mode; "newline") |
+            group(level | incr_indent_level($offset); mode; true) |
             {
               assign: {
                 name: $input.into,
@@ -707,30 +707,30 @@ def define(level; mode): (
         skip(level; mode)
       ) elif (has("split")) then (
         split(level)
+      ) elif (has("group")) then (
+        group(level; mode; multiline)
       ) elif (has("raw")) then (
         raw(level; mode)
       ) elif (has("initialized")) then (
         $MODE.user
       ) else (
-        traceable(level; mode) | join(joined_with)
+        traceable(level; mode) | join(if (multiline) then "\n" else "; " end)
       ) end
     );
 
     (
-      if (join_strategy == "newline") then (
+      if (multiline) then (
         {
           first: "\n",
           between: "\n",
           last: "\n"
         }
-      ) elif (join_strategy == "oneline") then (
+      ) else (
         {
           first: " ",
           between: "; ",
           last: "; "
         }
-      ) else (
-        "Unknown join strategy: \"" + join_strategy + "\"" | exit
       ) end
     ) as $sep |
 
@@ -743,7 +743,7 @@ def define(level; mode): (
           output: []
         };
         . as $reduce_input |
-        ($item | command(level | incr_indent_level(1); $reduce_input.mode; $sep.between)) as $output |
+        ($item | command(level | incr_indent_level(1); $reduce_input.mode; multiline)) as $output |
         if ($output | type == "string") then (
           {
             mode: $reduce_input.mode,
@@ -762,7 +762,7 @@ def define(level; mode): (
   );
 
   .define |
-    (group(level; mode; "newline")) as $group |
+    (group(level; mode; true)) as $group |
     if (.name | is_legit_varname | not) then (
       bad_varname
     ) else . end | (
@@ -861,6 +861,7 @@ def internals: (
 );
 
 def yml2bash: (
+  # TODO
   0 as $level |
     $ARGS.named.env + "\n" +
     $NAMESPACE.internal + "xtrace ()\n" +
