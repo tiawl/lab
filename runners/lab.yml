@@ -59,18 +59,19 @@ group:
   - - literal: project
 - if:
     not:
-      image:
-        tag:
-          defined:
-            image:
-            - key:
-              - literal: image
-              var: loc
-            - literal: alpine
-            tag:
-            - key:
+      group:
+      - image:
+          tag:
+            defined:
+              image:
+              - key:
+                - literal: image
+                var: loc
               - literal: alpine
-              var: version
+              tag:
+              - key:
+                - literal: alpine
+                var: version
     group:
     - image:
         pull:

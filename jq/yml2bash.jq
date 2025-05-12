@@ -23,12 +23,17 @@
   quiet: 0,
   user: 1
 } as $MODE |
+-2 as $NOINDENT |
 
-def indent(level): (
-  (" " * ((level + 1) * 4)) + .
+def incr_indent_level(i): (
+  if (. == $NOINDENT) then $NOINDENT else (. + i) end
 );
 
-def is_legit: (
+def indent(level): (
+  ((" " * ((level | incr_indent_level(1)) * 4)) // "") + .
+);
+
+def is_legit_varname: (
   test("^[a-zA-Z_][a-zA-Z0-9_]*$")
 );
 
@@ -61,13 +66,15 @@ def is_unique_key_object: (
 
 def sanitize: (
   def expansion: (
-    if (among(["default", "alternate", "replace"]) == 2) then (
-      "You can only use one of \"default\", \"alternate\" or \"replace\" fields for a same variable" | exit
+    if (among(["default", "alternate", "replace", "prompt"]) == 2) then (
+      "You can only use one of \"default\", \"alternate\", \"replace\" or \"prompt\" fields for a same variable" | exit
     ) else . end |
     if (has("default")) then (
       ":-" + (.default | sanitize)
     ) elif (has("alternate")) then (
       ":+" + (.alternate | sanitize)
+    ) elif (has("prompt") and .prompt) then (
+      "@P"
     ) elif (has("replace")) then (
       .replace |
         if (has("all")) then (
@@ -97,13 +104,15 @@ def sanitize: (
         "*"
       ) elif (.char == "tilde") then (
         "~"
+      ) elif (.char == "atsign") then (
+        "@"
       ) elif (.char == "newline") then (
         "$'\\n'"
       ) else (
         "Unknown char: \"" + .char + "\"" | exit
       ) end
     ) elif (has("var")) then (
-      if (.var | is_legit) then (
+      if (.var | is_legit_varname) then (
         "\"${" + .var + (
           if ($input | has("key")) then (
             "[" + ($input.key | sanitize) + "]"
@@ -124,39 +133,12 @@ def sanitize: (
       ) else (
         "Positional parameter must be number typed" | exit
       ) end
+    ) elif (has("file")) then (
+      "\"$(< " + (.file | sanitize) + ")\""
     ) else (
       "Unknown field object passing through sanitize(): \"" + keys[0] + "\"" | exit
     ) end
   ) | join("")
-);
-
-def op: (
-  def op_not: (
-    op |
-    {
-      program: {
-        before: ("! { " + .program.before),
-        after: (.program.after + "; }")
-      },
-      yml: .yml
-    }
-  );
-
-  if (type == "object") then (
-    if (has("not")) then (
-      .not | op_not
-    ) else (
-      {
-        program: {
-          before: "{ ",
-          after: "; }"
-        },
-        yml: .
-      }
-    ) end
-  ) else (
-    "Only object JSON type are authorized through op(): \"" + type + "\"" | exit
-  ) end
 );
 
 def xtrace(mode): (
@@ -369,7 +351,7 @@ def print(level): (
     .print |
     "printf " + (
       if (has("var")) then (
-        if (.var | is_legit) then (
+        if (.var | is_legit_varname) then (
           "-v " + .var + " "
         ) else (
           .var | bad_varname
@@ -444,15 +426,15 @@ def arithmetic(level): (
 );
 
 def define(level; mode): (
-  def group(level; mode): (
-    def command(level; mode): (
+  def group(level; mode; join_strategy): (
+    def command(level; mode; joined_with): (
       def switch(level; mode): (
         .switch as $input | .switch |
           ("case " + (.evaluate | sanitize) + " in\n") | indent(level) + (
             $input.branches | map(
               . as $branch |
               ("( " + ($branch.pattern | sanitize) + " ) ") | indent(level) +
-              ($branch | group(level; mode)) + " ;;\n"
+              ($branch | group(level; mode; "newline")) + " ;;\n"
             ) | join("")
           ) + ("esac" | indent(level))
       );
@@ -462,7 +444,7 @@ def define(level; mode): (
           if (mode == $MODE.internal) then (
             (.command + " " + (.args | map(sanitize) | join(" ")) + (
               if (has("pipe")) then (
-                " | " + (.pipe | command(-1; mode))
+                " | " + (.pipe | command(-1; mode; "\n"))
               ) else "" end
             )) | indent(level)
           ) else (
@@ -474,7 +456,7 @@ def define(level; mode): (
         .call |
           $PREFIX.function.internal + "call \"" + (($PREFIX.function.user + .command + " " + (.args | map(sanitize) | join(" "))) | remove_useless_quotes) + (
             if (has("pipe")) then (
-              " | " + (.pipe | command(-1; mode))
+              " | " + (.pipe | command(-1; mode; "\n"))
             ) else "" end
           ) + "\""
       );
@@ -483,14 +465,16 @@ def define(level; mode): (
         if (isempty(.[])) then (
           []
         ) else (
-          . as $input | ((
-            orchestrator |
-              walk(
-                if (type == "object") then (
-                  with_entries(select((.value != null) and (.value | (type == "object" and length == 0) | not)))
-                ) else . end
-              ) | .. | select(type == "string")
-            ) // null) as $program |
+          . as $input | (
+            (
+              orchestrator |
+                walk(
+                  if (type == "object") then (
+                    with_entries(select((.value != null) and (.value | (type == "object" and length == 0) | not)))
+                  ) else . end
+                ) | .. | select(type == "string")
+            ) // null
+          ) as $program |
           if ($program | type == "string") then (
             {
               program: $program,
@@ -531,33 +515,30 @@ def define(level; mode): (
 
       def conditional(level; mode): (
         def conditional_inner(level; mode): (
-          # check "group" field is an array
-          if ((.group | type) != "array") then (
-            "Conditional \"group\" field must be an array type but it is \"" + (.group | type) + "\"" | exit
-          ) else . end |
-
-          . as $input |
-            # "else" case
-            if ((type == "object") and (keys | length == 1) and (keys[0] == "group")) then (
-              {
-                op: {
-                  program: {
-                    before: "",
-                    after: ""
-                  },
-                  yml: {}
-                },
-              }
-            # "if" and "elif" cases
+          def conditional_op(mode): (
+            if (type == "object") then (
+              if (has("not")) then (
+                "{ ! " + (.not | conditional_op(mode)) + "; }"
+              ) else (
+                group($NOINDENT; mode; "oneline")
+              ) end
             ) else (
-              {
-                op: ($input | op),
-              }
-            ) end | .op as $op |
-              {
-                cond: ($op.program.before + ($op.yml | conditionable(-1; mode) | join("; ")) + $op.program.after),
-                group: ($input | group(level; mode)),
-              }
+              "Only object JSON type are authorized through conditional_op(): \"" + type + "\"" | exit
+            ) end
+          );
+
+          {
+            cond: (
+              # "else" case
+              if ((type == "object") and (keys | length == 1) and (keys[0] == "group")) then (
+                ""
+              # "if" and "elif" cases
+              ) else (
+                conditional_op(mode)
+              ) end
+            ),
+            group: group(level; mode; "newline"),
+          }
         );
 
         .if | . as $input |
@@ -605,7 +586,7 @@ def define(level; mode): (
           ) elif (has("from")) then (
             (if (mode != $MODE.internal) then $MODE.quiet else mode end) as $mode |
               ("source <(\n" | indent(level)) +
-              (.from | map(sourceable($mode) | indent(level + 1)) | join("\n")) + "\n" +
+              (.from | map(sourceable($mode) | indent(level | incr_indent_level(1))) | join("\n")) + "\n" +
               (")" | indent(level))
             ) else (
             "Authorized fields into source JSON object are \"string\" and \"from\"" | exit
@@ -618,14 +599,15 @@ def define(level; mode): (
           if (has("into") | not) then (
             ".register used without .register.into" | exit
           ) else . end |
-          if (among(["group", "arithmetic"]) == 2) then (
-            "You can only use one of \"group\" or \"arithmetic\" fields into register" | exit
+          if (among(["group", "arithmetic", "split"]) == 2) then (
+            "You can only use one of \"group\", \"arithmetic\" or \"split\" fields into register" | exit
           ) else . end |
           if (has("group")) then (
-            group(level + $offset; mode) |
+            group(level | incr_indent_level($offset); mode; "newline") |
             {
               assign: {
                 name: $input.into,
+                scope: (if ($input | has("scope")) then $input.scope else "local" end),
                 value: [
                   [
                     {
@@ -640,7 +622,7 @@ def define(level; mode): (
                   ]
                 ]
               }
-            } | assign(level + $offset; false) |
+            } | assign(level | incr_indent_level($offset); false) |
             if (mode != $MODE.internal) then (
               # TODO
               ("coproc CAT { cat; }\n" | indent(level)) +
@@ -657,6 +639,7 @@ def define(level; mode): (
             {
               assign: {
                 name: $input.into,
+                scope: (if ($input | has("scope")) then $input.scope else "local" end),
                 value: [
                   [
                     {
@@ -665,7 +648,9 @@ def define(level; mode): (
                   ]
                 ]
               }
-            } | assign(level + $offset; false)
+            } | assign(level | incr_indent_level($offset); false)
+          ) elif (has("split")) then (
+            ("mapfile -t -d " + ($input.split.delimiter | sanitize) + " " + ($input.into | sanitize) + " <<< " + ($input.split.string | sanitize)) | indent(level | incr_indent_level($offset))
           ) else (
             "Authorized fields into register are: arithmetic and group" | exit
           ) end
@@ -705,17 +690,37 @@ def define(level; mode): (
         return(level)
       ) elif (has("skip")) then (
         skip(level)
+      ) elif (has("split")) then (
+        split(level)
       ) elif (has("raw")) then (
         raw(level; mode)
       ) elif (has("initialized")) then (
         $MODE.user
       ) else (
-        traceable(level; mode) | join("\n")
+        traceable(level; mode) | join(joined_with)
       ) end
     );
 
     (
-      "{\n"
+      if (join_strategy == "newline") then (
+        {
+          first: "\n",
+          between: "\n",
+          last: "\n"
+        }
+      ) elif (join_strategy == "oneline") then (
+        {
+          first: " ",
+          between: "; ",
+          last: "; "
+        }
+      ) else (
+        "Unknown join strategy: \"" + join_strategy + "\"" | exit
+      ) end
+    ) as $sep |
+
+    (
+      "{" + $sep.first
     ) + (
       reduce .group[] as $item (
         {
@@ -723,7 +728,7 @@ def define(level; mode): (
           output: []
         };
         . as $reduce_input |
-        ($item | command(level + 1; $reduce_input.mode)) as $output |
+        ($item | command(level | incr_indent_level(1); $reduce_input.mode; $sep.between)) as $output |
         if ($output | type == "string") then (
           {
             mode: $reduce_input.mode,
@@ -735,15 +740,15 @@ def define(level; mode): (
             output: $reduce_input.output
           }
         ) end
-      ) | .output | join("\n")
-    ) + "\n" + (
+      ) | .output | join($sep.between)
+    ) + $sep.last + (
       "}" | indent(level)
     )
   );
 
   .define |
-    (group(level; mode)) as $group |
-    if (.name | is_legit | not) then (
+    (group(level; mode; "newline")) as $group |
+    if (.name | is_legit_varname | not) then (
       bad_varname
     ) else . end | (
       (
@@ -766,10 +771,9 @@ def main: (
         group: (
           [
             {raw: {command: ($PREFIX.function.internal + "init"), args: []}},
-            {harden: {command: [{literal: "id"}]}},
-            {register: {group: [{raw: {command: "id", args: [[{literal: "--user"}], [{literal: "--name"}]]}}], into: [{literal: "user"}]}},
+            {register: {group: [{skip: [[{literal: "\\u"}]]}, {print: {format: "%s", args: [[{var: "_", "prompt": true}]]}}], into: [{literal: "user"}]}},
             {assign: {name: [{literal: "user"}], value: [[{var: "USER", default: [{var: "user"}]}]]}},
-            {register: {group: [{raw: {command: "id", args: [[{literal: "--user"}]]}}], into: [{literal: "uid"}]}},
+            {register: {group: [{skip: [[{file: [{literal: "/etc/passwd"}]}]]}, {skip: [[{var: "_", replace: {start: [{char: "asterisk"}, {char: "newline"}, {var: "user"}, {literal: ":x:"}], match: "longest"}}]]}, {print: {format: "%s", args: [[{var: "_", replace: {end: [{literal: ":"}, {char: "asterisk"}], match: "longest"}}]]}}], into: [{literal: "uid"}]}},
             {assign: {name: [{literal: "uid"}], value: [[{var: "UID", default: [{var: "uid"}]}]]}},
             {assign: {name: [{literal: "home"}]}},
             {print: {format: "%s", var: "home", args: [[{char: "tilde"}]]}},
