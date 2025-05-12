@@ -1,7 +1,7 @@
 # !/usr/bin/env --split-string gojq --from-file
 
 # TODO:
-# - more checks like conditional "run"
+# - more checks
 # - op:
 #   - and
 #   - or
@@ -11,6 +11,7 @@
 #   - while:  while list-1; do list-2; done
 #             while [[ expression ]]; do list-2; done
 #   - for:    for (( <expr1> ; <expr2> ; <expr3> )) ; do <list> ; done
+# - async/wait
 
 {
   user: "__",
@@ -434,15 +435,15 @@ def arithmetic(level; mode): (
 );
 
 def define(level; mode): (
-  def group(level; mode; multiline): (
-    def command(level; mode; multiline): (
+  def group(level; mode; multilined; indent_first): (
+    def command(level; mode; multilined): (
       def switch(level; mode): (
         .switch as $input | .switch |
           ("case " + (.evaluate | sanitize(mode)) + " in\n") | indent(level) + (
             $input.branches | map(
               . as $branch |
               ("( " + ($branch.pattern | sanitize(mode)) + " ) ") | indent(level) +
-              ($branch | group(level; mode; true)) + " ;;\n"
+              ($branch | group(level; mode; true; false)) + " ;;\n"
             ) | join("")
           ) + ("esac" | indent(level))
       );
@@ -524,14 +525,10 @@ def define(level; mode): (
       def conditional(level; mode): (
         def conditional_inner(level; mode): (
           def conditional_op(mode): (
-            if (type == "object") then (
-              if (has("not")) then (
-                "{ ! " + (.not | conditional_op(mode)) + "; }"
-              ) else (
-                group($NOINDENT; mode; false)
-              ) end
+            if (has("not")) then (
+              "{ ! " + (.not | conditional_op(mode)) + "; }"
             ) else (
-              "Only object JSON type are authorized through conditional_op(): \"" + type + "\"" | exit
+              group($NOINDENT; mode; false; false)
             ) end
           );
 
@@ -545,7 +542,7 @@ def define(level; mode): (
                 conditional_op(mode)
               ) end
             ),
-            group: group(level; mode; true),
+            group: group(level; mode; true; false),
           }
         );
 
@@ -611,7 +608,7 @@ def define(level; mode): (
             "You can only use one of \"group\", \"arithmetic\" or \"split\" fields into register" | exit
           ) else . end |
           if (has("group")) then (
-            group(level | incr_indent_level($offset); mode; true) |
+            group(level | incr_indent_level($offset); mode; true; false) |
             {
               assign: {
                 name: $input.into,
@@ -700,18 +697,30 @@ def define(level; mode): (
       ) elif (has("split")) then (
         split(level)
       ) elif (has("group")) then (
-        group(level; mode; multiline)
+        group(level; mode; multilined; true)
       ) elif (has("raw")) then (
         raw(level; mode)
       ) elif (has("initialized")) then (
         $MODE.user
       ) else (
-        traceable(level; mode) | join(if (multiline) then "\n" else "; " end)
+        traceable(level; mode) | join(if (multilined) then "\n" else "; " end)
       ) end
     );
 
+    def redirections: (
+      .redirections | map(
+        is_unique_key_object |
+        if (has("output")) then (
+          .output |
+            (.left.fd | tostring) + (if (.appending) then ">>" else ">" end) + (.right | if (has("fd")) then ("&" + (.fd | tostring)) else (" " + .file) end)
+        ) else (
+          "Unknown redirection type: \"" + keys[0] + "\"" | exit
+        ) end
+      ) | join(" ")
+    );
+
     (
-      if (multiline) then (
+      if (multilined) then (
         {
           first: "\n",
           between: "\n",
@@ -726,8 +735,9 @@ def define(level; mode): (
       ) end
     ) as $sep |
 
+    .group as $input |
     (
-      "{" + $sep.first
+      ("{" + $sep.first) | if (indent_first) then (indent(level)) else . end
     ) + (
       reduce .group.commands[] as $item (
         {
@@ -735,7 +745,7 @@ def define(level; mode): (
           output: []
         };
         . as $reduce_input |
-        ($item | command(level | incr_indent_level(1); $reduce_input.mode; multiline)) as $output |
+        ($item | command(level | incr_indent_level(1); $reduce_input.mode; multilined)) as $output |
         if ($output | type == "string") then (
           {
             mode: $reduce_input.mode,
@@ -749,12 +759,18 @@ def define(level; mode): (
         ) end
       ) | .output | join($sep.between)
     ) + $sep.last + (
-      "}" | indent(level)
+      (
+        "}" + (
+          if (.group | has("redirections")) then (
+            " " + (.group | redirections)
+          ) else "" end
+        )
+      ) | indent(level)
     )
   );
 
   .define |
-    (group(level; mode; true)) as $group |
+    (group(level; mode; true; true)) as $group |
     if (.name | is_legit_varname | not) then (
       bad_varname
     ) else . end | (
@@ -803,7 +819,7 @@ def internals: (
                   evaluate: [{parameter: 2}, {parameter: 1, replace: {all: [{char: "newline"}], with: [{parameter: 2}]}}, {parameter: 2}],
                   branches: [
                     {pattern: [{char: "asterisk"}, {parameter: 2}, {parameter: 3, replace: {end: [{literal: " "}, {char: "asterisk"}], match: "longest"}}, {parameter: 2}, {char: "asterisk"}], group: {commands: [{source: {from: [{print: {format: "%s", args: [[{parameter: 3}]]}}]}}]}},
-                    {pattern: [{char: "asterisk"}], group: {commands: [{group: {commands: [{print: {format: "Unknown \"%s\". You probably forgot to harden a command, to define a function or to enable a disabled builtin\\n", args: [[{parameter: 3}]]}}]}}, {return: 1}]}}
+                    {pattern: [{char: "asterisk"}], group: {commands: [{group: {commands: [{print: {format: "Unknown \"%s\". You probably forgot to harden a command, to define a function or to enable a disabled builtin\\n", args: [[{parameter: 3}]]}}], redirections: [{output: {left: {fd: 1}, right: {fd: 2}}}]}}, {return: 1}]}}
                   ]
                 }
               }
