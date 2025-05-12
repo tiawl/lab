@@ -17,6 +17,14 @@ group:
     type: associative
 - assign:
     name:
+    - literal: version
+    type: associative
+- assign:
+    name:
+    - literal: path
+    type: associative
+- assign:
+    name:
     - literal: loc
     key:
     - literal: image
@@ -24,27 +32,27 @@ group:
     - - literal: local
       - key:
         - literal: image
-        var: sep
+        special: sep
 - assign:
     name:
     - literal: project
     key:
     - literal: container
     value:
-    - - var: runner_name
+    - - special: RUNNER
       - key:
         - literal: container
-        var: sep
+        special: sep
 - assign:
     name:
     - literal: project
     key:
     - literal: image
     value:
-    - - var: runner_name
+    - - special: RUNNER
       - key:
         - literal: image
-        var: sep
+        special: sep
 - assign:
     name:
     - literal: version
@@ -94,7 +102,7 @@ group:
           - literal: alpine
           - key:
             - literal: tag
-            var: sep
+            special: sep
           - literal: '*'
     - image:
         tag:
@@ -129,7 +137,7 @@ group:
     - literal: ssh_home
     value:
     - - literal: /home/
-      - var: user
+      - special: USER
       - literal: /.ssh
 - readonly:
   - - literal: ssh_home
@@ -152,7 +160,7 @@ group:
         - literal: alpine
         - key:
           - literal: tag
-          var: sep
+          special: sep
         - key:
           - literal: alpine
           var: version
@@ -163,7 +171,7 @@ group:
       - key:
         - literal: USER
         value:
-        - var: user
+        - special: USER
       - key:
         - literal: SSH_HOME
         value:
@@ -171,7 +179,7 @@ group:
       - key:
         - literal: UID
         value:
-        - var: uid
+        - special: UID
       context:
       - literal: ./dockerfiles/bounce
       image:
@@ -293,6 +301,6 @@ group:
         - literal: ssh_home
       - literal: /
       - var: key_name
-    - - var: user
+    - - special: USER
       - literal: '@'
       - var: bounce_ip

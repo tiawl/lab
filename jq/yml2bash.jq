@@ -13,11 +13,9 @@
 #   - for:    for (( <expr1> ; <expr2> ; <expr3> )) ; do <list> ; done
 
 {
-  function: {
-    user: "___",
-    internal: "__"
-  }
-} as $PREFIX |
+  user: "__",
+  internal: "_"
+} as $NAMESPACE |
 {
   internal: -1,
   quiet: 0,
@@ -64,35 +62,49 @@ def is_unique_key_object: (
   ) else . end
 );
 
-def sanitize: (
-  def expansion: (
+def sanitize(mode): (
+  def expansion(mode): (
     if (among(["default", "alternate", "replace", "prompt"]) == 2) then (
       "You can only use one of \"default\", \"alternate\", \"replace\" or \"prompt\" fields for a same variable" | exit
     ) else . end |
     if (has("default")) then (
-      ":-" + (.default | sanitize)
+      ":-" + (.default | sanitize(mode))
     ) elif (has("alternate")) then (
-      ":+" + (.alternate | sanitize)
+      ":+" + (.alternate | sanitize(mode))
     ) elif (has("prompt") and .prompt) then (
       "@P"
     ) elif (has("replace")) then (
       .replace |
         if (has("all")) then (
-          "//" + (.all | sanitize) + (if (has("with")) then ("/" + (.with | sanitize)) else "" end)
+          "//" + (.all | sanitize(mode)) + (if (has("with")) then ("/" + (.with | sanitize(mode))) else "" end)
         ) elif (has("first")) then (
-          "/" + (.first | sanitize) + (if (has("with")) then ("/" + (.with | sanitize)) else "" end)
+          "/" + (.first | sanitize(mode)) + (if (has("with")) then ("/" + (.with | sanitize(mode))) else "" end)
         ) elif (has("start") and (.match == "shortest")) then (
-          "#" + (.start | sanitize)
+          "#" + (.start | sanitize(mode))
         ) elif (has("start") and (.match == "longest")) then (
-          "##" + (.start | sanitize)
+          "##" + (.start | sanitize(mode))
         ) elif (has("end") and (.match == "shortest")) then (
-          "%" + (.end | sanitize)
+          "%" + (.end | sanitize(mode))
         ) elif (has("end") and (.match == "longest")) then (
-          "%%" + (.end | sanitize)
+          "%%" + (.end | sanitize(mode))
         ) else (
           "Unknown field into \"replace\": " + (. | tostring) | exit
         ) end
     ) else "" end
+  );
+
+  def variable(name; mode): (
+    "\"${" + name + (
+      if (has("key")) then (
+        "[" + (.key | sanitize(mode)) + "]"
+      ) elif (has("index")) then (
+        if (.index | type == "number") then (
+          "[" + (.index | tostring) + "]"
+        ) else (
+          "The .var.index must be number typed" | exit
+        ) end
+      ) else "" end
+    ) + expansion(mode) + "}\""
   );
 
   map(
@@ -113,28 +125,26 @@ def sanitize: (
       ) end
     ) elif (has("var")) then (
       if (.var | is_legit_varname) then (
-        "\"${" + .var + (
-          if ($input | has("key")) then (
-            "[" + ($input.key | sanitize) + "]"
-          ) elif ($input | has("index")) then (
-            if ($input.index | type == "number") then (
-              "[" + ($input.index | tostring) + "]"
-            ) else (
-              "The .var.index must be number typed" | exit
-            ) end
-          ) else "" end
-        ) + ($input | expansion) + "}\""
+        variable(if (mode != $MODE.internal) then $NAMESPACE.user else "" end + .var; mode)
       ) else (
         $input.var | bad_varname
       ) end
     ) elif (has("parameter")) then (
       if (.parameter | type == "number") then (
-        "\"${" + (.parameter | tostring) + ($input | expansion) + "}\""
+        variable(.parameter | tostring; mode)
       ) else (
         "Positional parameter must be number typed" | exit
       ) end
+    ) elif (has("special")) then (
+      variable(
+        if (.special == "last") then "_"
+        elif ((.special == "FUNCNAME") or (.special == "USER") or (.special == "UID") or (.special == "HOME") or (.special == "RUNNER") or (.special == "sep")) then .special
+        else (
+          "Unknown special variable: \"" + .special + "\"" | exit
+        ) end
+      ; mode)
     ) elif (has("file")) then (
-      "\"$(< " + (.file | sanitize) + ")\""
+      "\"$(< " + (.file | sanitize(mode)) + ")\""
     ) else (
       "Unknown field object passing through sanitize(): \"" + keys[0] + "\"" | exit
     ) end
@@ -144,7 +154,7 @@ def sanitize: (
 def xtrace(mode): (
   if (mode == $MODE.user) then (
     [
-      $PREFIX.function.internal + "xtrace \"" + (.xtrace | remove_useless_quotes) + "\"",
+      $NAMESPACE.internal + "xtrace \"" + (.xtrace | remove_useless_quotes) + "\"",
       .program
     ]
   ) else (
@@ -154,7 +164,7 @@ def xtrace(mode): (
   ) end
 );
 
-def orchestrator: {
+def orchestrator(mode): {
   image: {
     builder: {
       prune: (try (
@@ -167,18 +177,18 @@ def orchestrator: {
         .image.tag.defined as $defined |
           if $defined then (
             "image tag defined " +
-              ($defined.image | sanitize) + " " +
-              ($defined.tag | sanitize)
+              ($defined.image | sanitize(mode)) + " " +
+              ($defined.tag | sanitize(mode))
           ) else null end
       ) catch null),
       create: (try (
         .image.tag.create as $create |
           if $create then (
             "image tag create " +
-              ($create.from.image | sanitize) + " " +
-              ($create.from.tag | sanitize) + " " +
-              ($create.to.image | sanitize) + " " +
-              ($create.to.tag | sanitize)
+              ($create.from.image | sanitize(mode)) + " " +
+              ($create.from.tag | sanitize(mode)) + " " +
+              ($create.to.image | sanitize(mode)) + " " +
+              ($create.to.tag | sanitize(mode))
           ) else null end
       ) catch null)
     },
@@ -186,34 +196,34 @@ def orchestrator: {
       .image.pull as $pull |
         if $pull then (
           "image pull " +
-            ($pull.registry | sanitize) + " " +
-            ($pull.library | sanitize) + " " +
-            ($pull.image | sanitize) + " " +
-            ($pull.tag | sanitize)
+            ($pull.registry | sanitize(mode)) + " " +
+            ($pull.library | sanitize(mode)) + " " +
+            ($pull.image | sanitize(mode)) + " " +
+            ($pull.tag | sanitize(mode))
         ) else null end
     ) catch null),
     remove: (try (
       .image.remove as $remove |
         if $remove then (
           "image remove " +
-            ($remove.image | sanitize) + " " +
-            ($remove.tag | sanitize)
+            ($remove.image | sanitize(mode)) + " " +
+            ($remove.tag | sanitize(mode))
         ) else null end
     ) catch null),
     prune: (try (
       .image.prune as $prune |
         if $prune then (
           "image prune " +
-            ($prune.matching | sanitize)
+            ($prune.matching | sanitize(mode))
         ) else null end
     ) catch null),
     build: (try (
       .image.build as $build |
         if $build then (
           "image build " +
-            ($build.image | sanitize) + " " +
-            ($build.context | sanitize) + " " +
-            ([$build.args[][] | sanitize] | join(" "))
+            ($build.image | sanitize(mode)) + " " +
+            ($build.context | sanitize(mode)) + " " +
+            ([$build.args[][] | sanitize(mode)] | join(" "))
         ) else null end
     ) catch null)
   },
@@ -223,9 +233,9 @@ def orchestrator: {
         .container.resource.copy as $copy |
           if $copy then (
             "container resource copy " +
-              ($copy.name | sanitize) + " " +
-              ($copy.src | sanitize) + " " +
-              ($copy.dest | sanitize)
+              ($copy.name | sanitize(mode)) + " " +
+              ($copy.src | sanitize(mode)) + " " +
+              ($copy.dest | sanitize(mode))
           ) else null end
       ) catch null)
     },
@@ -233,23 +243,23 @@ def orchestrator: {
       .container.create as $create |
         if $create then (
           "container create " +
-            ($create.name | sanitize) + " " +
-            ($create.image | sanitize) + " " +
-            ($create.hostname | sanitize)
+            ($create.name | sanitize(mode)) + " " +
+            ($create.image | sanitize(mode)) + " " +
+            ($create.hostname | sanitize(mode))
         ) else null end
     ) catch null),
     start: (try (
       .container.start as $start |
         if $start then (
           "container start " +
-            ($start.name | sanitize)
+            ($start.name | sanitize(mode))
         ) else null end
     ) catch null),
     stop: (try (
       .container.stop as $stop |
         if $stop then (
           "container stop " +
-            ($stop.name | sanitize)
+            ($stop.name | sanitize(mode))
         ) else null end
     ) catch null)
   },
@@ -259,7 +269,7 @@ def orchestrator: {
         .network.ip.get as $get |
           if $get then (
             "network ip get " +
-              ($get.container | sanitize)
+              ($get.container | sanitize(mode))
           ) else null end
       ) catch null)
     }
@@ -269,15 +279,15 @@ def orchestrator: {
 def harden(level; mode): (
   (
     .harden |
-    "harden " + (.command | sanitize) + (
+    "harden " + (.command | sanitize(mode)) + (
       if (has("as") and (.as | length > 0)) then (
         " " + (
           if (mode != $MODE.internal) then (
-            $PREFIX.function.user
+            $NAMESPACE.user
           ) else "" end
-        ) + (.as | sanitize)
+        ) + (.as | sanitize(mode))
       ) elif (mode != $MODE.internal) then (
-        " '" + $PREFIX.function.user + "'" + (.command | sanitize) | gsub("''"; "")
+        " '" + $NAMESPACE.user + "'" + (.command | sanitize(mode)) | gsub("''"; "")
       ) else "" end
     )
   ) | indent(level)
@@ -292,7 +302,7 @@ def default_assign: (
   ) else . end
 );
 
-def assign(level; sanitized_value): (
+def assign(level; mode; sanitized_value): (
   .assign | default_assign |
   if ((has("key")) and (.type != "string")) then (
     "Values into associative or indexed array must be string typed" | exit
@@ -303,61 +313,67 @@ def assign(level; sanitized_value): (
   if ((.type == "string") and (has("value")) and (.value | length > 1)) then (
     "You can not attribute several values to a string variable" | exit
   ) else . end | . as $input |
-  (
-    if (.scope == "global") then (
-      "global "
-    ) elif (.scope == "local") then (
-      "local "
-    ) else (
-      "Unknown .assign.scope: \"" + .type + "\"" | exit
-    ) end
-  ) + (
-    if (.type == "string") then (
-      ""
-    ) elif (.type == "associative") then (
-      "-A "
-    ) elif (.type == "indexed") then (
-      "-a "
-    ) elif (.type == "reference") then (
-      "-n "
-    ) else (
-      "Unknown .assign.type: \"" + .type + "\"" | exit
-    ) end
-  ) + (.name | sanitize) + (
-    if (has("key")) then (
-      "[" + (.key | sanitize) + "]"
-    ) else "" end
-  ) + (
+  if ((.name | length == 1) and (.name[0] | has("special")) and (.name[0].special == "last")) then (
+    ": "
+  ) else (
+    (
+      if (.scope == "global") then (
+        "global "
+      ) elif (.scope == "local") then (
+        "local "
+      ) else (
+        "Unknown .assign.scope: \"" + .type + "\"" | exit
+      ) end
+    ) + (
+      if (.type == "string") then (
+        ""
+      ) elif (.type == "associative") then (
+        "-A "
+      ) elif (.type == "indexed") then (
+        "-a "
+      ) elif (.type == "reference") then (
+        "-n "
+      ) else (
+        "Unknown .assign.type: \"" + .type + "\"" | exit
+      ) end
+    ) + (
+      if (mode != $MODE.internal) then $NAMESPACE.user else "" end + (.name | sanitize(mode))
+    ) + (
+      if (has("key")) then (
+        "[" + (.key | sanitize(mode)) + "]"
+      ) else "" end
+    ) + if (has("value")) then "=" else "" end
+  ) end + (
     if (has("value")) then (
       if (sanitized_value) then (
         if (($input.type == "indexed") or ($input.type == "associative")) then (
-          ("'('" + (.value | map(sanitize) | join("' '")) + "')'") | gsub("''"; "")
+          ("'('" + (.value | map(sanitize(mode)) | join("' '")) + "')'") | gsub("''"; "")
         ) else (
-          .value[0] | sanitize
+          .value[0] | sanitize(mode)
         ) end
       ) else (
         .value[][0].unsanitized
-      ) end | "=" + .
+      ) end
     ) else "" end
   ) | indent(level)
 );
 
-def readonly(level): (
-  ("readonly " + (.readonly | map(sanitize) | join(" "))) | indent(level)
+def readonly(level; mode): (
+  ("readonly -- " + (.readonly | map(if (mode != $MODE.internal) then $NAMESPACE.user else "" end + (. | sanitize(mode))) | join(" "))) | indent(level)
 );
 
-def print(level): (
+def print(level; mode): (
   (
     .print |
     "printf " + (
       if (has("var")) then (
         if (.var | is_legit_varname) then (
-          "-v " + .var + " "
+          "-v " + (if (mode != $MODE.internal) then $NAMESPACE.user else "" end) + .var + " "
         ) else (
           .var | bad_varname
         ) end
       ) else "" end
-    ) + "'" + .format + "' " + (.args | map(sanitize) | join(" ")) + (
+    ) + "-- '" + .format + "' " + (.args | map(sanitize(mode)) | join(" ")) + (
       if (has("to")) then (
         if (.to == "stderr") then (
           " >&2"
@@ -373,24 +389,24 @@ def return(level): (
   ("return " + (.return | tostring)) | indent(level)
 );
 
-def skip(level): (
-  (": " + (.skip | map(sanitize) | join(" "))) | indent(level)
+def skip(level; mode): (
+  (": " + (.skip | map(sanitize(mode)) | join(" "))) | indent(level)
 );
 
-def on_off(level): (
-  ((keys[0]) + " " + (values[] | map(sanitize) | join(" "))) | indent(level)
+def on_off(level; mode): (
+  ((keys[0]) + " " + (values[] | map(sanitize(mode)) | join(" "))) | indent(level)
 );
 
 def capture_restore(level): (
   if (.capture or .restore) then (keys[0] | indent(level)) else "" end
 );
 
-def parameters(level): (
-  ("set -- " + (.parameters | map(sanitize) | join(" "))) | indent(level)
+def parameters(level; mode): (
+  ("set -- " + (.parameters | map(sanitize(mode)) | join(" "))) | indent(level)
 );
 
-def arithmetic(level): (
-  def arithmetic_inner: (
+def arithmetic(level; mode): (
+  def arithmetic_inner(mode): (
     def arithmetic_op: (
       if (.op == "add") then (
         "+"
@@ -401,11 +417,11 @@ def arithmetic(level): (
       ) end
     );
 
-    def arithmetic_side: (
+    def arithmetic_side(mode): (
       is_unique_key_object |
 
       if ((has("parameter")) or (has("var"))) then (
-        [.] | sanitize
+        [.] | sanitize(mode)
       ) elif (has("number")) then (
         if (.number | type == "number") then (
           .number | tostring
@@ -413,16 +429,16 @@ def arithmetic(level): (
           ".number arithmetic side must be number typed" | exit
         ) end
       ) elif (has("arithmetic")) then (
-        .arithmetic | arithmetic_inner
+        .arithmetic | arithmetic_inner(mode)
       ) else (
         "Unknown arithmetic side: " + (. | tostring) | exit
       ) end
     );
 
-    "( " + (.left | arithmetic_side) + " " + (arithmetic_op) + " " + (.right | arithmetic_side) + " )"
+    "( " + (.left | arithmetic_side(mode)) + " " + (arithmetic_op) + " " + (.right | arithmetic_side(mode)) + " )"
   );
 
-  ("(" + (.arithmetic | arithmetic_inner) + ")") | indent(level)
+  ("(" + (.arithmetic | arithmetic_inner(mode)) + ")") | indent(level)
 );
 
 def define(level; mode): (
@@ -430,10 +446,10 @@ def define(level; mode): (
     def command(level; mode; joined_with): (
       def switch(level; mode): (
         .switch as $input | .switch |
-          ("case " + (.evaluate | sanitize) + " in\n") | indent(level) + (
+          ("case " + (.evaluate | sanitize(mode)) + " in\n") | indent(level) + (
             $input.branches | map(
               . as $branch |
-              ("( " + ($branch.pattern | sanitize) + " ) ") | indent(level) +
+              ("( " + ($branch.pattern | sanitize(mode)) + " ) ") | indent(level) +
               ($branch | group(level; mode; "newline")) + " ;;\n"
             ) | join("")
           ) + ("esac" | indent(level))
@@ -442,7 +458,7 @@ def define(level; mode): (
       def raw(level; mode): (
         .raw |
           if (mode == $MODE.internal) then (
-            (.command + " " + (.args | map(sanitize) | join(" ")) + (
+            (.command + " " + (.args | map(sanitize(mode)) | join(" ")) + (
               if (has("pipe")) then (
                 " | " + (.pipe | command(-1; mode; "\n"))
               ) else "" end
@@ -454,7 +470,7 @@ def define(level; mode): (
 
       def call(mode): (
         .call |
-          $PREFIX.function.internal + "call \"" + (($PREFIX.function.user + .command + " " + (.args | map(sanitize) | join(" "))) | remove_useless_quotes) + (
+          $NAMESPACE.internal + "call \"" + (($NAMESPACE.user + .command + " " + (.args | map(sanitize(mode)) | join(" "))) | remove_useless_quotes) + (
             if (has("pipe")) then (
               " | " + (.pipe | command(-1; mode; "\n"))
             ) else "" end
@@ -467,7 +483,7 @@ def define(level; mode): (
         ) else (
           . as $input | (
             (
-              orchestrator |
+              orchestrator(mode) |
                 walk(
                   if (type == "object") then (
                     with_entries(select((.value != null) and (.value | (type == "object" and length == 0) | not)))
@@ -483,7 +499,7 @@ def define(level; mode): (
           ) elif ($input | has("call")) then (
             {
               program: ($input | call(mode)),
-              xtrace: ($input.call.command + " " + ($input.call.args | map(sanitize) | join(" ")))
+              xtrace: ($input.call.command + " " + ($input.call.args | map(sanitize(mode)) | join(" ")))
             }
           ) else (
             "Unknown traceable type: \"" + ($input | tostring) + "\"" | exit
@@ -500,7 +516,7 @@ def define(level; mode): (
         ((keys[0] | if (test("^container$|^image$|^network$|^volume$|^runner$")) then "s" else "" end) + "defer") as $fn |
         deferrable(-1; mode) | map(
           gsub("'"; "'\"'\"'") | (
-            if (startswith($PREFIX.function.internal + "xtrace")) then (
+            if (startswith($NAMESPACE.internal + "xtrace")) then (
               "defer '"
             ) else (
               $fn + " '"
@@ -574,7 +590,7 @@ def define(level; mode): (
 
       def sourceable(mode): (
         if (has("call")) then call(mode)
-        elif (has("print")) then print(-1)
+        elif (has("print")) then print(-1; mode)
         else ("Authorized tasks into source.from JSON array are \"call\" and \"print\"" | exit)
         end
       );
@@ -582,7 +598,7 @@ def define(level; mode): (
       def source(level; mode): (
         .source |
           if (has("string")) then (
-            ("source /proc/self/fd/0 <<< " + (.string | map(sanitize) | join(" "))) | indent(level)
+            ("source /proc/self/fd/0 <<< " + (.string | map(sanitize(mode)) | join(" "))) | indent(level)
           ) elif (has("from")) then (
             (if (mode != $MODE.internal) then $MODE.quiet else mode end) as $mode |
               ("source <(\n" | indent(level)) +
@@ -614,7 +630,7 @@ def define(level; mode): (
                       unsanitized: (
                         "\"$(" + . + "; " + (
                           if (mode != $MODE.internal) then (
-                            "declare -f " + $PREFIX.function.internal + "autoincr >&3"
+                            "declare -f " + $NAMESPACE.internal + "autoincr >&3"
                           ) else "" end
                         ) + ")\""
                       )
@@ -622,20 +638,19 @@ def define(level; mode): (
                   ]
                 ]
               }
-            } | assign(level | incr_indent_level($offset); false) |
+            } | assign(level | incr_indent_level($offset); mode; false) |
             if (mode != $MODE.internal) then (
               # TODO
               ("coproc CAT { cat; }\n" | indent(level)) +
               ("{\n" | indent(level)) + . + "\n" +
               ("} 3>&${CAT[1]}\n" | indent(level)) +
               ("exec {CAT[1]}>&-\n" | indent(level)) +
-              # TODO
               ("mapfile source_me <&${CAT[0]}\n" | indent(level)) +
               ("source /proc/self/fd/0 <<< \"${source_me[@]}\"\n" | indent(level)) +
               ("unset source_me\n" | indent(level))
             ) else . end
           ) elif (has("arithmetic")) then (
-            arithmetic(-1) |
+            arithmetic(-1; mode) |
             {
               assign: {
                 name: $input.into,
@@ -648,9 +663,9 @@ def define(level; mode): (
                   ]
                 ]
               }
-            } | assign(level | incr_indent_level($offset); false)
+            } | assign(level | incr_indent_level($offset); mode; false)
           ) elif (has("split")) then (
-            ("mapfile -t -d " + ($input.split.delimiter | sanitize) + " " + ($input.into | sanitize) + " <<< " + ($input.split.string | sanitize)) | indent(level | incr_indent_level($offset))
+            ("mapfile -t -d " + ($input.split.delimiter | sanitize(mode)) + " " + ($input.into | sanitize(mode)) + " <<< " + ($input.split.string | sanitize(mode))) | indent(level | incr_indent_level($offset))
           ) else (
             "Authorized fields into register are: arithmetic and group" | exit
           ) end
@@ -661,11 +676,11 @@ def define(level; mode): (
       if (has("harden")) then (
         harden(level; mode)
       ) elif (has("assign")) then (
-        assign(level; true)
+        assign(level; mode; true)
       ) elif (has("define")) then (
         define(level; mode)
       ) elif (has("readonly")) then (
-        readonly(level)
+        readonly(level; mode)
       ) elif (has("if")) then (
         conditional(level; mode)
       ) elif (has("switch")) then (
@@ -675,21 +690,21 @@ def define(level; mode): (
       ) elif (has("register")) then (
         register(level; mode)
       ) elif (has("parameters")) then (
-        parameters(level)
+        parameters(level; mode)
       ) elif (has("capture") or has("restore")) then (
         capture_restore(level)
       ) elif (has("on") or has("off")) then (
-        on_off(level)
+        on_off(level; mode)
       ) elif (has("source")) then (
         source(level; mode)
       ) elif (has("arithmetic")) then (
-        arithmetic(level)
+        arithmetic(level; mode)
       ) elif (has("print")) then (
-        print(level)
+        print(level; mode)
       ) elif (has("return")) then (
         return(level)
       ) elif (has("skip")) then (
-        skip(level)
+        skip(level; mode)
       ) elif (has("split")) then (
         split(level)
       ) elif (has("raw")) then (
@@ -753,9 +768,9 @@ def define(level; mode): (
     ) else . end | (
       (
         if (mode == $MODE.internal) then (
-          $PREFIX.function.internal
+          $NAMESPACE.internal
         ) else (
-          $PREFIX.function.user
+          $NAMESPACE.user
         ) end + .name + " ()\n"
       ) | indent(level)
     ) + $group + "\n"
@@ -770,16 +785,12 @@ def main: (
         name: "main",
         group: (
           [
-            {raw: {command: ($PREFIX.function.internal + "init"), args: []}},
-            {register: {group: [{skip: [[{literal: "\\u"}]]}, {print: {format: "%s", args: [[{var: "_", "prompt": true}]]}}], into: [{literal: "user"}]}},
-            {assign: {name: [{literal: "user"}], value: [[{var: "USER", default: [{var: "user"}]}]]}},
-            {register: {group: [{skip: [[{file: [{literal: "/etc/passwd"}]}]]}, {skip: [[{var: "_", replace: {start: [{char: "asterisk"}, {char: "newline"}, {var: "user"}, {literal: ":x:"}], match: "longest"}}]]}, {print: {format: "%s", args: [[{var: "_", replace: {end: [{literal: ":"}, {char: "asterisk"}], match: "longest"}}]]}}], into: [{literal: "uid"}]}},
-            {assign: {name: [{literal: "uid"}], value: [[{var: "UID", default: [{var: "uid"}]}]]}},
-            {assign: {name: [{literal: "home"}]}},
-            {print: {format: "%s", var: "home", args: [[{char: "tilde"}]]}},
-            {assign: {name: [{literal: "home"}], value: [[{var: "HOME", default: [{var: "home"}]}]]}},
-            {assign: {name: [{literal: "runner_name"}], value: [[{literal: (input_filename | sub(".*/";"") | sub("\\.yml$";""))}]]}},
-            {readonly: [[{literal: "user"}], [{literal: "uid"}], [{literal: "home"}], [{literal: "runner_name"}]]},
+            {raw: {command: ($NAMESPACE.internal + "init_runner"), args: []}},
+            {register: {group: [{skip: [[{literal: "\\u"}]]}, {print: {format: "%s", args: [[{special: "last", "prompt": true}]]}}], into: [{special: "last"}]}},
+            {assign: {name: [{literal: "USER"}], value: [[{special: "USER", default: [{special: "last"}]}]], scope: "global"}},
+            {print: {format: "%s", var: "HOME", args: [[{char: "tilde"}]]}},
+            {assign: {name: [{literal: "RUNNER"}], value: [[{literal: (input_filename | sub(".*/";"") | sub("\\.yml$";""))}]], scope: "global"}},
+            {readonly: [[{literal: "USER"}], [{literal: "HOME"}], [{literal: "RUNNER"}]]},
             {initialized: true}
           ] + $input.group
         )
@@ -793,12 +804,13 @@ def internals: (
     [
       {
         define: {
-          name: "init",
+          name: "init_runner",
           group: [
             {on: [[{literal: "errexit"}], [{literal: "errtrace"}], [{literal: "noclobber"}], [{literal: "nounset"}], [{literal: "pipefail"}], [{literal: "lastpipe"}], [{literal: "extglob"}]]},
             {raw: {command: "bash_setup", args: []}},
             {raw: {command: "load_resources", args: []}},
-            {raw: {command: "init", args: []}}
+            {raw: {command: "init", args: []}},
+            {raw: {command: "unset", args: [[{literal: "path"}, {literal: "version"}]]}}
           ]
         }
       },
@@ -809,7 +821,7 @@ def internals: (
             {
               register: {
                 into: [{literal: "authorized"}],
-                group: [{raw: {command: "compgen", args: [[{literal: "-A"}], [{literal: "function"}], [{literal: "-X"}], [{literal: ("!" + $PREFIX.function.user + "*")}]]}}]
+                group: [{raw: {command: "compgen", args: [[{literal: "-A"}], [{literal: "function"}], [{literal: "-X"}], [{literal: ("!" + $NAMESPACE.user + "*")}]]}}]
               }
             },
             {parameters: [[{var: "authorized"}], [{literal: "|"}], [{parameter: 1}]]},
@@ -830,7 +842,7 @@ def internals: (
           name: "autoincr",
           group: [
             {assign: {name: [{literal: "REPLY"}], value: [[{literal: "1"}]], scope: "global"}},
-            {register: {into: [{literal: "fn"}], group: [{raw: {command: "declare", args: [[{literal: "-f"}], [{var: "FUNCNAME", index: 0}]], pipe: {raw: {command: "sed", args: [[{var: "sed", key: [{literal: "autoincr"}]}]]}}}}]}},
+            {register: {into: [{literal: "fn"}], group: [{raw: {command: "declare", args: [[{literal: "-f"}], [{special: "FUNCNAME", index: 0}]], pipe: {raw: {command: "sed", args: [[{var: "sed", key: [{literal: "autoincr"}]}]]}}}}]}},
             {source: {string: [[{var: "fn"}]]}}
           ]
         }
@@ -851,17 +863,17 @@ def internals: (
 def yml2bash: (
   0 as $level |
     $ARGS.named.env + "\n" +
-    $PREFIX.function.internal + "xtrace ()\n" +
+    $NAMESPACE.internal + "xtrace ()\n" +
     "{\n" +
-    ($PREFIX.function.internal + "autoincr\n" | indent($level)) +
+    ($NAMESPACE.internal + "autoincr\n" | indent($level)) +
     ("set -- \"${1}\" \"${REPLY}\"\n" | indent($level)) +
-    ($PREFIX.function.internal + "color \"${2}\"\n" | indent($level)) +
+    ($NAMESPACE.internal + "color \"${2}\"\n" | indent($level)) +
     ("set -- \"${1}\" \"${2}\" \"${REPLY}\"\n" | indent($level)) +
     ("printf '%b\\033[1m%s\\033[0m > %s\\n' \"\\033[38;5;${3}m\" \"${2}\" \"${1}\" >&2\n" | indent($level)) +
     "}\n" +
     internals +
     main +
-    $PREFIX.function.internal + "main \"${@}\""
+    $NAMESPACE.internal + "main \"${@}\""
 );
 
 yml2bash
