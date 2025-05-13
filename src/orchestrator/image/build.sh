@@ -8,7 +8,7 @@ image_build () { #HELP <repository> <context> [<key> <value>] [<key> <value>] [.
   }
 
   decode_buildkit_protobuf () {
-    protoc --decode=moby.buildkit.v1.StatusResponse --descriptor_set_in=<(printf '%s' "${buf[descriptor_set_control]}" | base64 -d) --proto_path=/dev/fd <(printf '%s' "${buf[vendor_control]}")
+    protoc --decode=moby.buildkit.v1.StatusResponse --descriptor_set_in=<(base64 -d <<< "${buf[descriptor_set_control]}") --proto_path=/dev/fd <(printf '%s' "${buf[vendor_control]}")
   }
 
   local repo context json method tag endpoint replace_me

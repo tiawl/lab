@@ -453,7 +453,7 @@ def define(level; mode): (
           if (mode == $MODE.internal) then (
             (.command + " " + (.args | map(sanitize(mode)) | join(" ")) + (
               if (has("pipe")) then (
-                " | " + (.pipe | command(-1; mode; false))
+                " | " + (.pipe | group($NOINDENT; mode; false; false))
               ) else "" end
             )) | indent(level)
           ) else (
@@ -465,7 +465,7 @@ def define(level; mode): (
         .call |
           $NAMESPACE.internal + "call \"" + (($NAMESPACE.user + .command + " " + (.args | map(sanitize(mode)) | join(" "))) | remove_useless_quotes) + (
             if (has("pipe")) then (
-              " | " + (.pipe | command(-1; mode; false))
+              " | " + (.pipe | group($NOINDENT; mode; false; false))
             ) else "" end
           ) + "\""
       );
@@ -784,115 +784,115 @@ def define(level; mode): (
     ) + $group + "\n"
 );
 
-def internals: (
-  # TODO: 1 level is enough
-  -1 as $level |
-    [
-      {
-        define: {
-          name: "init_runner",
-          group: {
-            commands: [
-              {on: [[{literal: "errexit"}], [{literal: "errtrace"}], [{literal: "noclobber"}], [{literal: "nounset"}], [{literal: "pipefail"}], [{literal: "lastpipe"}], [{literal: "extglob"}]]},
-              {raw: {command: "bash_setup", args: []}},
-              {raw: {command: "load_resources", args: []}},
-              {raw: {command: "init", args: []}},
-              {raw: {command: "unset", args: [[{literal: "path"}, {literal: "version"}]]}}
-            ]
-          }
-        }
-      },
-      {
-        define: {
-          name: "call",
-          group: {
-            commands: [
-              {
-                register: {
-                  into: [{literal: "authorized"}],
-                  group: {commands: [{raw: {command: "compgen", args: [[{literal: "-A"}], [{literal: "function"}], [{literal: "-X"}], [{literal: ("!" + $NAMESPACE.user + "*")}]]}}]}
-                }
-              },
-              {parameters: [[{var: "authorized"}], [{literal: "|"}], [{parameter: 1}]]},
-              {
-                switch: {
-                  evaluate: [{parameter: 2}, {parameter: 1, replace: {all: [{char: "newline"}], with: [{parameter: 2}]}}, {parameter: 2}],
-                  branches: [
-                    {pattern: [{char: "asterisk"}, {parameter: 2}, {parameter: 3, replace: {end: [{literal: " "}, {char: "asterisk"}], match: "longest"}}, {parameter: 2}, {char: "asterisk"}], group: {commands: [{source: {from: [{print: {format: "%s", args: [[{parameter: 3}]]}}]}}]}},
-                    {pattern: [{char: "asterisk"}], group: {commands: [{group: {commands: [{print: {format: "Unknown \"%s\". You probably forgot to harden a command, to define a function or to enable a disabled builtin\\n", args: [[{parameter: 3}]]}}], redirections: [{output: {left: {fd: 1}, right: {fd: 2}}}]}}, {return: 1}]}}
-                  ]
-                }
-              }
-            ]
-          }
-        }
-      },
-      {
-        define: {
-          name: "autoincr",
-          group: {
-            commands: [
-              {assign: {name: [{literal: "REPLY"}], value: [[{literal: "1"}]], scope: "global"}},
-              {register: {into: [{literal: "fn"}], group: {commands: [{raw: {command: "declare", args: [[{literal: "-f"}], [{special: "FUNCNAME", index: 0}]], pipe: {raw: {command: "sed", args: [[{var: "sed", key: [{literal: "autoincr"}]}]]}}}}]}}},
-              {source: {string: [[{var: "fn"}]]}}
-            ]
-          }
-        }
-      },
-      {
-        define: {
-          name: "color",
-          group: {
-            commands: [
-              {register: {into: [{literal: "i"}], arithmetic: {left: {arithmetic: {left: {parameter: 1}, op: "modulo", right: {number: ($ARGS.positional | length)}}}, op: "add", right: {number: 1}}}},
-              {assign: {name: [{literal: "colors"}], type: "indexed", value: ($ARGS.positional | map([{literal: .}]))}},
-              {assign: {name: [{literal: "REPLY"}], value: [[{var: "colors", key: [{var: "i"}]}]], scope: "global"}}
-            ]
-          }
-        }
-      }
-    ] | map(define($level; $MODE.internal)) | join("")
-);
-
-def main: (
-  # TODO: 1 level is enough
-  -1 as $level |
-    . as $input |
+def internals(level): (
+  [
     {
       define: {
-        name: "main",
+        name: "init_runner",
         group: {
-          commands: (
-            [
-              {raw: {command: ($NAMESPACE.internal + "init_runner"), args: []}},
-              {register: {group: {commands: [{skip: [[{literal: "\\u"}]]}, {print: {format: "%s", args: [[{special: "last", "prompt": true}]]}}]}, into: [{special: "last"}]}},
-              {assign: {name: [{literal: "USER"}], value: [[{special: "USER", default: [{special: "last"}]}]], scope: "global"}},
-              {print: {format: "%s", var: "HOME", args: [[{char: "tilde"}]]}},
-              {assign: {name: [{literal: "RUNNER"}], value: [[{literal: (input_filename | sub(".*/";"") | sub("\\.yml$";""))}]], scope: "global"}},
-              {readonly: [[{literal: "USER"}], [{literal: "HOME"}], [{literal: "RUNNER"}]]},
-              {initialized: true}
-            ] + $input.group.commands
-          )
+          commands: [
+            {on: [[{literal: "errexit"}], [{literal: "errtrace"}], [{literal: "noclobber"}], [{literal: "nounset"}], [{literal: "pipefail"}], [{literal: "lastpipe"}], [{literal: "extglob"}]]},
+            {raw: {command: "bash_setup", args: []}},
+            {raw: {command: "load_resources", args: []}},
+            {raw: {command: "init", args: []}},
+            {raw: {command: "unset", args: [[{literal: "path"}, {literal: "version"}]]}}
+          ]
         }
       }
-    } | define($level; $MODE.internal)
+    },
+    {
+      define: {
+        name: "call",
+        group: {
+          commands: [
+            {
+              register: {
+                into: [{literal: "authorized"}],
+                group: {commands: [{raw: {command: "compgen", args: [[{literal: "-A"}], [{literal: "function"}], [{literal: "-X"}], [{literal: ("!" + $NAMESPACE.user + "*")}]]}}]}
+              }
+            },
+            {parameters: [[{var: "authorized"}], [{literal: "|"}], [{parameter: 1}]]},
+            {
+              switch: {
+                evaluate: [{parameter: 2}, {parameter: 1, replace: {all: [{char: "newline"}], with: [{parameter: 2}]}}, {parameter: 2}],
+                branches: [
+                  {pattern: [{char: "asterisk"}, {parameter: 2}, {parameter: 3, replace: {end: [{literal: " "}, {char: "asterisk"}], match: "longest"}}, {parameter: 2}, {char: "asterisk"}], group: {commands: [{source: {from: [{print: {format: "%s", args: [[{parameter: 3}]]}}]}}]}},
+                  {pattern: [{char: "asterisk"}], group: {commands: [{group: {commands: [{print: {format: "Unknown \"%s\". You probably forgot to harden a command, to define a function or to enable a disabled builtin\\n", args: [[{parameter: 3}]]}}], redirections: [{output: {left: {fd: 1}, right: {fd: 2}}}]}}, {return: 1}]}}
+                ]
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      define: {
+        name: "autoincr",
+        group: {
+          commands: [
+            {assign: {name: [{literal: "REPLY"}], value: [[{literal: "1"}]], scope: "global"}},
+            {register: {into: [{literal: "fn"}], group: {commands: [{raw: {command: "declare", args: [[{literal: "-f"}], [{special: "FUNCNAME", index: 0}]], pipe: {group: {commands: [{raw: {command: "sed", args: [[{var: "sed", key: [{literal: "autoincr"}]}]]}}]}}}}]}}},
+            {source: {string: [[{var: "fn"}]]}}
+          ]
+        }
+      }
+    },
+    {
+      define: {
+        name: "color",
+        group: {
+          commands: [
+            {register: {into: [{literal: "i"}], arithmetic: {left: {arithmetic: {left: {parameter: 1}, op: "modulo", right: {number: ($ARGS.positional | length)}}}, op: "add", right: {number: 1}}}},
+            {assign: {name: [{literal: "colors"}], type: "indexed", value: ($ARGS.positional | map([{literal: .}]))}},
+            {assign: {name: [{literal: "REPLY"}], value: [[{var: "colors", key: [{var: "i"}]}]], scope: "global"}}
+          ]
+        }
+      }
+    },
+    {
+      define: {
+        name: "xtrace",
+        group: {
+          commands: [
+            {raw: {command: ($NAMESPACE.internal + "autoincr"), args: []}},
+            {parameters: [[{parameter: 1}], [{var: "REPLY"}]]},
+            {raw: {command: ($NAMESPACE.internal + "color"), args: [[{parameter: 2}]]}},
+            {parameters: [[{parameter: 1}], [{parameter: 2}], [{var: "REPLY"}]]},
+            {group: {commands: [{print: {format: "%b\\033[1m%s\\033[0m > %s\\n", args: [[{literal: "\\033[38;5;"}, {parameter: 3}, {literal: "m"}], [{parameter: 2}], [{parameter: 1}]]}}], redirections: [{output: {left: {fd: 1}, right: {fd: 2}}}]}}
+          ]
+        }
+      }
+    }
+  ] | map(define(level; $MODE.internal)) | join("")
 );
 
-def yml2bash: (
-  # TODO
-  0 as $level |
-    $ARGS.named.env + "\n" +
-    $NAMESPACE.internal + "xtrace ()\n" +
-    "{\n" +
-    ($NAMESPACE.internal + "autoincr\n" | indent($level)) +
-    ("set -- \"${1}\" \"${REPLY}\"\n" | indent($level)) +
-    ($NAMESPACE.internal + "color \"${2}\"\n" | indent($level)) +
-    ("set -- \"${1}\" \"${2}\" \"${REPLY}\"\n" | indent($level)) +
-    ("printf '%b\\033[1m%s\\033[0m > %s\\n' \"\\033[38;5;${3}m\" \"${2}\" \"${1}\" >&2\n" | indent($level)) +
-    "}\n" +
-    internals +
-    main +
-    $NAMESPACE.internal + "main \"${@}\""
+def main(level): (
+  {
+    define: {
+      name: "main",
+      group: {
+        commands: (
+          [
+            {raw: {command: ($NAMESPACE.internal + "init_runner"), args: []}},
+            {register: {group: {commands: [{skip: [[{literal: "\\u"}]]}, {print: {format: "%s", args: [[{special: "last", "prompt": true}]]}}]}, into: [{special: "last"}]}},
+            {assign: {name: [{literal: "USER"}], value: [[{special: "USER", default: [{special: "last"}]}]], scope: "global"}},
+            {print: {format: "%s", var: "HOME", args: [[{char: "tilde"}]]}},
+            {assign: {name: [{literal: "RUNNER"}], value: [[{literal: (input_filename | sub(".*/";"") | sub("\\.yml$";""))}]], scope: "global"}},
+            {readonly: [[{literal: "USER"}], [{literal: "HOME"}], [{literal: "RUNNER"}]]},
+            {initialized: true}
+          ] + .group.commands
+        )
+      }
+    }
+  } | define(level; $MODE.internal)
 );
 
-yml2bash
+def write_runner_script: (
+  -1 as $level |
+  $ARGS.named.env + "\n" +
+  internals($level) +
+  main($level) +
+  $NAMESPACE.internal + "main \"${@}\""
+);
+
+write_runner_script
