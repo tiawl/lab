@@ -9,24 +9,22 @@ group:
       as:
       - literal: ssh_keygen
   - assign:
-      name:
-      - literal: loc
-      type: associative
+      vars:
+      - - literal: ssh_home
+      - - literal: key_name
+      - - literal: bounce_ip
+      scope: local
   - assign:
-      name:
-      - literal: project
+      vars:
+      - - literal: loc
+      - - literal: project
+      - - literal: version
+      - - literal: path
       type: associative
-  - assign:
+      scope: local
+  - mutate:
       name:
-      - literal: version
-      type: associative
-  - assign:
-      name:
-      - literal: path
-      type: associative
-  - assign:
-      name:
-      - literal: loc
+        var: loc
       key:
       - literal: image
       value:
@@ -34,9 +32,9 @@ group:
         - key:
           - literal: image
           special: sep
-  - assign:
+  - mutate:
       name:
-      - literal: project
+        var: project
       key:
       - literal: container
       value:
@@ -44,9 +42,9 @@ group:
         - key:
           - literal: container
           special: sep
-  - assign:
+  - mutate:
       name:
-      - literal: project
+        var: project
       key:
       - literal: image
       value:
@@ -54,17 +52,15 @@ group:
         - key:
           - literal: image
           special: sep
-  - assign:
+  - mutate:
       name:
-      - literal: version
+        var: version
       key:
       - literal: alpine
       value:
       - - literal: "3.21"
-      scope: global
   - readonly:
     - - literal: loc
-  - readonly:
     - - literal: project
   - if:
       not:
@@ -135,21 +131,20 @@ group:
               - key:
                 - literal: alpine
                 var: version
-  - assign:
+  - mutate:
       name:
-      - literal: ssh_home
+        var: ssh_home
       value:
       - - literal: /home/
         - special: USER
         - literal: /.ssh
-  - readonly:
-    - - literal: ssh_home
-  - assign:
+  - mutate:
       name:
-      - literal: key_name
+        var: key_name
       value:
       - - literal: host2lab
   - readonly:
+    - - literal: ssh_home
     - - literal: key_name
   - image:
       build:
@@ -190,24 +185,22 @@ group:
           - literal: image
           var: project
         - literal: bounce
-  - assign:
+  - mutate:
       name:
-      - literal: path
+        var: path
       key:
       - literal: bounce_ssh_key
       value:
       - - var: ssh_home
         - literal: /
         - var: key_name
-      scope: global
-  - assign:
+  - mutate:
       name:
-      - literal: path
+        var: path
       key:
       - literal: ssh_home
       value:
       - - var: ssh_home
-      scope: global
   - readonly:
     - - literal: path
   - container:
@@ -288,7 +281,7 @@ group:
                   - literal: container
                 - literal: bounce
       into:
-      - literal: bounce_ip
+        var: bounce_ip
   - readonly:
     - - literal: bounce_ip
   - call:

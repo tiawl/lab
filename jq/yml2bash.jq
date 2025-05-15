@@ -99,11 +99,13 @@ def sanitize(mode): (
       if (has("key")) then (
         "[" + (.key | sanitize(mode)) + "]"
       ) elif (has("index")) then (
-        if (.index | type == "number") then (
-          "[" + (.index | tostring) + "]"
-        ) else (
-          "The .var.index must be number typed" | exit
-        ) end
+        "[" + (
+          if (.index | type == "number") then (
+            .index | tostring
+          ) else (
+            "The .var.index must be number typed" | exit
+          ) end
+        ) + "]"
       ) else "" end
     ) + expansion(mode) + "}\""
   );
@@ -146,6 +148,11 @@ def sanitize(mode): (
       ; mode)
     ) elif (has("file")) then (
       "\"$(< " + (.file | sanitize(mode)) + ")\""
+    ) elif (has("unsafe")) then (
+      if (mode != $MODE.internal) then (
+        "\"unsafe\" can only be used as internal user" | exit
+      ) else . end |
+      .unsafe
     ) else (
       "Unknown field object passing through sanitize(): \"" + keys[0] + "\"" | exit
     ) end
@@ -294,17 +301,13 @@ def harden(level; mode): (
   ) | indent(level)
 );
 
-def default_assign: (
+def default_type: (
   if ((.type == "") or (.type == null)) then (
     .type = "string"
-  ) else . end |
-  if ((.scope == "") or (.scope == null)) then (
-    .scope = "local"
   ) else . end
 );
 
-def assign(level; mode; sanitized_value): (
-  .assign | default_assign |
+def check_type_coherence: (
   if ((has("key")) and (.type != "string")) then (
     "Values into associative or indexed array must be string typed" | exit
   ) else . end |
@@ -313,10 +316,51 @@ def assign(level; mode; sanitized_value): (
   ) else . end |
   if ((.type == "string") and (has("value")) and (.value | length > 1)) then (
     "You can not attribute several values to a string variable" | exit
-  ) else . end | . as $input |
-  if ((.name | length == 1) and (.name[0] | has("special")) and (.name[0].special == "last")) then (
-    ": "
-  ) else (
+  ) else . end
+);
+
+def mutate(level; mode): (
+  .mutate | default_type | check_type_coherence | . as $input |
+  if (has("value") | not) then (
+    "You forgot the .mutate.value mandatory field into: " + tostring | exit
+  ) else . end |
+  if (has("scope")) then (
+    "Use assign instead of mutate to attribute a scope for this variable: " + tostring | exit
+  ) else . end |
+  if ((.name | has("var") | not) and (.name | has("special") | not)) then (
+    "In .mutate.name you can only var or special: " + tostring | exit
+  ) else . end |
+  if ((.name | has("var")) and (.name.var | is_legit_varname | not)) then (
+    .name | bad_varname
+  ) else . end |
+  (
+    if ((.name | has("special")) and (.name.special == "last")) then (
+      ": "
+    ) else (
+      if (mode != $MODE.internal) then $NAMESPACE.user else "" end + .name.var + (
+        if (has("key")) then (
+          "[" + (.key | sanitize(mode)) + "]"
+        ) else "" end
+      ) + "="
+    ) end + (
+      if (($input.type == "indexed") or ($input.type == "associative")) then (
+        ("(" + (.value | map(sanitize(mode)) | join(" ")) + ")")
+      ) else (
+        .value[0] | sanitize(mode)
+      ) end
+    )
+  ) | indent(level)
+);
+
+def assign(level; mode): (
+  .assign | default_type | check_type_coherence |
+  if (has("scope") | not) then (
+    "You forgot the .assign.scope mandatory field into: " + tostring | exit
+  ) else . end |
+  if (has("value")) then (
+    "Use mutate instead of assign to change value of this variable: " + tostring | exit
+  ) else . end |
+  (
     (
       if (.scope == "global") then (
         "global "
@@ -337,25 +381,7 @@ def assign(level; mode; sanitized_value): (
       ) else (
         "Unknown .assign.type: \"" + .type + "\"" | exit
       ) end
-    ) + (
-      if (mode != $MODE.internal) then $NAMESPACE.user else "" end + (.name | sanitize(mode))
-    ) + (
-      if (has("key")) then (
-        "[" + (.key | sanitize(mode)) + "]"
-      ) else "" end
-    ) + if (has("value")) then "=" else "" end
-  ) end + (
-    if (has("value")) then (
-      if (sanitized_value) then (
-        if (($input.type == "indexed") or ($input.type == "associative")) then (
-          ("'('" + (.value | map(sanitize(mode)) | join("' '")) + "')'") | gsub("''"; "")
-        ) else (
-          .value[0] | sanitize(mode)
-        ) end
-      ) else (
-        .value[][0].unsanitized
-      ) end
-    ) else "" end
+    ) + (.vars | map(if (mode != $MODE.internal) then $NAMESPACE.user else "" end + (. | sanitize(mode))) | join(" "))
   ) | indent(level)
 );
 
@@ -400,16 +426,6 @@ def parameters(level; mode): (
 
 def arithmetic(level; mode): (
   def arithmetic_inner(mode): (
-    def arithmetic_op: (
-      if (.op == "add") then (
-        "+"
-      ) elif (.op == "modulo") then (
-        "%"
-      ) else (
-        "Unknown arithmetic operand: " + . | exit
-      ) end
-    );
-
     def arithmetic_side(mode): (
       is_unique_key_object |
 
@@ -428,7 +444,15 @@ def arithmetic(level; mode): (
       ) end
     );
 
-    "( " + (.left | arithmetic_side(mode)) + " " + (arithmetic_op) + " " + (.right | arithmetic_side(mode)) + " )"
+    "( " + (
+      if (has("addition")) then (
+        .addition | ((.left | arithmetic_side(mode)) + " + " + (.right | arithmetic_side(mode)))
+      ) elif (has("remainder")) then (
+        .remainder | ((.left | arithmetic_side(mode)) + " % " + (.right | arithmetic_side(mode)))
+      ) else (
+        "Unknown arithmetic operand: " + tostring | exit
+      ) end
+    ) + " )"
   );
 
   ("(" + (.arithmetic | arithmetic_inner(mode)) + ")") | indent(level)
@@ -450,19 +474,36 @@ def define(level; mode): (
 
       def raw(level; mode): (
         .raw |
-          if (mode == $MODE.internal) then (
-            (.command + " " + (.args | map(sanitize(mode)) | join(" ")) + (
-              if (has("pipe")) then (
-                " | " + (.pipe | group($NOINDENT; mode; false; false))
-              ) else "" end
-            )) | indent(level)
-          ) else (
+          if (mode != $MODE.internal) then (
             "\"raw\" can only be used as internal user" | exit
-          ) end
+          ) else . end |
+          if (.command | test("\\s")) then (
+            ".raw.command must not contain space characters" | exit
+          ) else . end |
+          (.command + " " + (.args | map(sanitize(mode)) | join(" ")) + (
+            if (has("pipe")) then (
+              " | " + (.pipe | group($NOINDENT; mode; false; false))
+            ) else "" end
+          )) | indent(level)
+      );
+
+      def coproc(level; mode): (
+        .coproc |
+          if (mode != $MODE.internal) then (
+            "\"coproc\" can only be used as internal user" | exit
+          ) else . end |
+          (group(level; mode; true; false)) as $group |
+          if (.name | test("^[A-Z_][A-Z0-9_]*$") | not) then (
+            "Bad coproc name: \"" + . + "\"" | exit
+          ) else . end |
+          (("coproc " + .name + " ") | indent(level)) + $group
       );
 
       def call(mode): (
         .call |
+          if (.command | test("\\s")) then (
+            ".call.command must not contain space characters" | exit
+          ) else . end |
           $NAMESPACE.internal + "call \"" + (($NAMESPACE.user + .command + " " + (.args | map(sanitize(mode)) | join(" "))) | remove_useless_quotes) + (
             if (has("pipe")) then (
               " | " + (.pipe | group($NOINDENT; mode; false; false))
@@ -608,53 +649,37 @@ def define(level; mode): (
             "You can only use one of \"group\", \"arithmetic\" or \"split\" fields into register" | exit
           ) else . end |
           if (has("group")) then (
-            group(level | incr_indent_level($offset); mode; true; false) |
-            {
-              assign: {
-                name: $input.into,
-                scope: (if ($input | has("scope")) then $input.scope else "local" end),
-                value: [
-                  [
-                    {
-                      unsanitized: (
-                        "\"$(" + . + "; " + (
-                          if (mode != $MODE.internal) then (
-                            "declare -f " + $NAMESPACE.internal + "autoincr >&3"
-                          ) else "" end
-                        ) + ")\""
-                      )
-                    }
-                  ]
-                ]
-              }
-            } | assign(level | incr_indent_level($offset); mode; false) |
-            if (mode != $MODE.internal) then (
-              # TODO
-              ("coproc CAT { cat; }\n" | indent(level)) +
-              ("{\n" | indent(level)) + . + "\n" +
-              ("} 3>&${CAT[1]}\n" | indent(level)) +
-              ("exec {CAT[1]}>&-\n" | indent(level)) +
-              ("mapfile source_me <&${CAT[0]}\n" | indent(level)) +
-              ("source /proc/self/fd/0 <<< \"${source_me[@]}\"\n" | indent(level)) +
-              ("unset source_me\n" | indent(level))
-            ) else . end
+            if (mode == $MODE.internal) then (
+              group(level | incr_indent_level($offset); mode; true; false) as $group |
+              {
+                mutate: {
+                  name: $input.into,
+                  value: [[{unsafe: ("\"$(" + $group + ")\"")}]]
+                }
+              } | mutate(level | incr_indent_level($offset); $MODE.internal)
+            ) else (
+              if ((.into | has("var")) and (.into.var | is_legit_varname | not)) then (
+                .into | bad_varname
+              ) else . end |
+              (group($NOINDENT; mode; false; false) | gsub("'"; "'\"'\"'")) as $group |
+              if (.into | has("var")) then (
+                (($NAMESPACE.internal + "register '" + $NAMESPACE.user + $input.into.var + "' '" + $group + "'") | indent(level))
+              ) elif ((.into | has("special")) and (.into.special == "last")) then (
+                ": \"$(" + $group + ")\""
+              ) else (
+                "In .register.into you can only var or special: " + tostring | exit
+              ) end
+            ) end
           ) elif (has("arithmetic")) then (
-            arithmetic(-1; mode) |
+            arithmetic(-1; mode) as $arith |
             {
-              assign: {
+              mutate: {
                 name: $input.into,
-                scope: (if ($input | has("scope")) then $input.scope else "local" end),
-                value: [
-                  [
-                    {
-                      unsanitized: ("\"$" + . + "\"")
-                    }
-                  ]
-                ]
+                value: [[{unsafe: ("\"$" + $arith + "\"")}]]
               }
-            } | assign(level | incr_indent_level($offset); mode; false)
+            } | mutate(level | incr_indent_level($offset); $MODE.internal)
           ) elif (has("split")) then (
-            ("mapfile -t -d " + ($input.split.delimiter | sanitize(mode)) + " " + ($input.into | sanitize(mode)) + " <<< " + ($input.split.string | sanitize(mode))) | indent(level | incr_indent_level($offset))
+            ("mapfile -t " + ($input.split | if (has("delimiter")) then ("-d " + (.delimiter | sanitize(mode))) else "" end) + " " + ($input.into | sanitize(mode)) + " <<< " + ($input.split.string | sanitize(mode))) | indent(level | incr_indent_level($offset))
           ) else (
             "Authorized fields into register are: arithmetic and group" | exit
           ) end
@@ -665,7 +690,9 @@ def define(level; mode): (
       if (has("harden")) then (
         harden(level; mode)
       ) elif (has("assign")) then (
-        assign(level; mode; true)
+        assign(level; mode)
+      ) elif (has("mutate")) then (
+        mutate(level; mode)
       ) elif (has("define")) then (
         define(level; mode)
       ) elif (has("readonly")) then (
@@ -700,6 +727,8 @@ def define(level; mode): (
         group(level; mode; multilined; true)
       ) elif (has("raw")) then (
         raw(level; mode)
+      ) elif (has("coproc")) then (
+        coproc(level; mode)
       ) elif (has("initialized")) then (
         $MODE.user
       ) else (
@@ -707,14 +736,35 @@ def define(level; mode): (
       ) end
     );
 
-    def redirections: (
+    def redirections(mode): (
       .redirections | map(
         is_unique_key_object |
-        if (has("output")) then (
+        if (has("input")) then (
+          .input | "<" + (
+            if (has("var")) then (
+              if (.var | is_legit_varname) then ("&" + ([.] | sanitize(mode))) else (.var | bad_varname) end
+            ) else (
+              "Unknown input redirection: \"" + tostring + "\"" | exit
+            ) end
+          )
+        ) elif (has("output")) then (
           .output |
-            (.left.fd | tostring) + (if (.appending) then ">>" else ">" end) + (.right | if (has("fd")) then ("&" + (.fd | tostring)) else (" " + .file) end)
+            (.left.fd | tostring) + (
+              if (.appending) then ">>" else ">" end
+            ) + (
+              .right |
+              if (has("fd")) then (
+                "&" + (.fd | tostring)
+              ) elif (has("file")) then (
+                " " + .file
+              ) elif (has("var")) then (
+                if (.var | is_legit_varname) then ("&" + ([.] | sanitize(mode))) else (.var | bad_varname) end
+              ) else (
+                "Unknown right output redirection: \"" + tostring + "\"" | exit
+              ) end
+            )
         ) else (
-          "Unknown redirection type: \"" + keys[0] + "\"" | exit
+          "Unknown redirection: \"" + tostring + "\"" | exit
         ) end
       ) | join(" ")
     );
@@ -762,7 +812,7 @@ def define(level; mode): (
       (
         "}" + (
           if (.group | has("redirections")) then (
-            " " + (.group | redirections)
+            " " + (.group | redirections(mode))
           ) else "" end
         )
       ) | indent(level)
@@ -805,9 +855,10 @@ def internals(level): (
         name: "call",
         group: {
           commands: [
+            {assign: {vars: [[{literal: "authorized"}]], scope: "local"}},
             {
               register: {
-                into: [{literal: "authorized"}],
+                into: {var: "authorized"},
                 group: {commands: [{raw: {command: "compgen", args: [[{literal: "-A"}], [{literal: "function"}], [{literal: "-X"}], [{literal: ("!" + $NAMESPACE.user + "*")}]]}}]}
               }
             },
@@ -830,8 +881,15 @@ def internals(level): (
         name: "autoincr",
         group: {
           commands: [
-            {assign: {name: [{literal: "REPLY"}], value: [[{literal: "1"}]], scope: "global"}},
-            {register: {into: [{literal: "fn"}], group: {commands: [{raw: {command: "declare", args: [[{literal: "-f"}], [{special: "FUNCNAME", index: 0}]], pipe: {group: {commands: [{raw: {command: "sed", args: [[{var: "sed", key: [{literal: "autoincr"}]}]]}}]}}}}]}}},
+            {assign: {vars: [[{literal: "REPLY"}]], scope: "global"}},
+            {mutate: {name: {var: "REPLY"}, value: [[{literal: "1"}]]}},
+            {assign: {vars: [[{literal: "fn"}]], scope: "local"}},
+            {
+              register: {
+                into: {var: "fn"},
+                group: {commands: [{raw: {command: "declare", args: [[{literal: "-f"}], [{special: "FUNCNAME", index: 0}]], pipe: {group: {commands: [{raw: {command: "sed", args: [[{var: "sed", key: [{literal: "autoincr"}]}]]}}]}}}}]}
+              }
+            },
             {source: {string: [[{var: "fn"}]]}}
           ]
         }
@@ -842,9 +900,17 @@ def internals(level): (
         name: "color",
         group: {
           commands: [
-            {register: {into: [{literal: "i"}], arithmetic: {left: {arithmetic: {left: {parameter: 1}, op: "modulo", right: {number: ($ARGS.positional | length)}}}, op: "add", right: {number: 1}}}},
-            {assign: {name: [{literal: "colors"}], type: "indexed", value: ($ARGS.positional | map([{literal: .}]))}},
-            {assign: {name: [{literal: "REPLY"}], value: [[{var: "colors", key: [{var: "i"}]}]], scope: "global"}}
+            {assign: {vars: [[{literal: "i"}]], scope: "local"}},
+            {
+              register: {
+                into: {var: "i"},
+                arithmetic: {addition: {left: {arithmetic: {remainder: {left: {parameter: 1}, right: {number: ($ARGS.positional | length)}}}}, right: {number: 1}}}
+              }
+            },
+            {assign: {vars: [[{literal: "colors"}]], type: "indexed", scope: "local"}},
+            {mutate: {name: {var: "colors"}, type: "indexed", value: ($ARGS.positional | map([{literal: .}]))}},
+            {assign: {vars: [[{literal: "REPLY"}]], scope: "global"}},
+            {mutate: {name: {var: "REPLY"}, value: [[{var: "colors", key: [{var: "i"}]}]]}}
           ]
         }
       }
@@ -862,6 +928,23 @@ def internals(level): (
           ]
         }
       }
+    },
+    {
+      define: {
+        name: "register",
+        group: {
+          commands: [
+            {assign: {vars: [[{literal: "ref"}]], type: "reference", scope: "local"}},
+            {mutate: {name: {var: "ref"}, value: [[{parameter: 1}]]}},
+            {assign: {vars: [[{literal: "source_me"}]], type: "indexed", scope: "local"}},
+            {coproc: {name: "CAT", group: {commands: [{raw: {command: "cat", args: []}}]}}},
+            {group: {commands: [{register: {into: {var: "ref"}, group: {commands: [{source: {string: [[{parameter: 2}]]}}, {group: {commands: [{raw: {command: "declare", args:[[{literal: "-f"}], [{literal: ($NAMESPACE.internal + "autoincr")}]]}}], redirections: [{output: {left: {fd: 1}, right: {fd: 3}}}]}}]}}}], redirections: [{output: {left: {fd: 3}, right: {var: "CAT", index: 1}}}]}},
+            {raw: {command: "exec", args: [[{unsafe: "{CAT[1]}>&-"}]]}},
+            {group: {commands: [{raw: {command: "mapfile", args: [[{literal: "source_me"}]]}}], redirections: [{input: {var: "CAT", index: 0}}]}},
+            {source: {string: [[{var: "source_me", key: [{char: "atsign"}]}]]}}
+          ]
+        }
+      }
     }
   ] | map(define(level; $MODE.internal)) | join("")
 );
@@ -874,10 +957,16 @@ def main(level): (
         commands: (
           [
             {raw: {command: ($NAMESPACE.internal + "init_runner"), args: []}},
-            {register: {group: {commands: [{skip: [[{literal: "\\u"}]]}, {print: {format: "%s", args: [[{special: "last", "prompt": true}]]}}]}, into: [{special: "last"}]}},
-            {assign: {name: [{literal: "USER"}], value: [[{special: "USER", default: [{special: "last"}]}]], scope: "global"}},
+            {assign: {vars: [[{literal: "USER"}], [{literal: "HOME"}], [{literal: "RUNNER"}]], scope: "global"}},
+            {
+              register: {
+                group: {commands: [{skip: [[{literal: "\\u"}]]}, {print: {format: "%s", args: [[{special: "last", "prompt": true}]]}}]},
+                into: {special: "last"}
+              }
+            },
+            {mutate: {name: {var: "USER"}, value: [[{special: "USER", default: [{special: "last"}]}]]}},
             {print: {format: "%s", var: "HOME", args: [[{char: "tilde"}]]}},
-            {assign: {name: [{literal: "RUNNER"}], value: [[{literal: (input_filename | sub(".*/";"") | sub("\\.yml$";""))}]], scope: "global"}},
+            {mutate: {name: {var: "RUNNER"}, value: [[{literal: (input_filename | sub(".*/";"") | sub("\\.yml$";""))}]]}},
             {readonly: [[{literal: "USER"}], [{literal: "HOME"}], [{literal: "RUNNER"}]]},
             {initialized: true}
           ] + .group.commands

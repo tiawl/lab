@@ -1,6 +1,6 @@
 # !/usr/bin/env --split-string sed --file
 
-/^\s*global\s'REPLY'='[0-9]\+';\?$/ {
+/^\s*REPLY='[0-9]\+';\?$/ {
   s/';\?$//
 
   :replace_trailing_nines_with_underscores
