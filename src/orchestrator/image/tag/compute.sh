@@ -1,6 +1,6 @@
 #! /usr/bin/env bash
 
-image_tag_compute() { #HELP <context>\tCreate a tag <new_image>:<new_tag> that refers to\n\t\t\t\t\t\t\t\t\t\t\t<image_source>:<tag_source>
+image_tag_compute() { #HELP <context> [<buildargs>]|Compute a tag from <context> and <buildargs>
   shift
 
   : "$({

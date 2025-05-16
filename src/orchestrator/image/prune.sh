@@ -1,6 +1,6 @@
 #! /usr/bin/env bash
 
-image_prune () { #HELP <pattern>\t\t\t\t\t\t\tRemove unused images matching <pattern>
+image_prune () { #HELP <pattern>|Remove unused images matching <pattern>
   shift
   local img
   set -f

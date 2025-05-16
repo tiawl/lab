@@ -1,6 +1,6 @@
 #! /usr/bin/env bash
 
-image_list () { #HELP <pattern>\t\t\t\t\t\t\tList images matching <pattern>
+image_list () { #HELP <pattern>|List images matching <pattern>
   shift
 
   local filters endpoint method http_code

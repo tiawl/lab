@@ -1,6 +1,6 @@
 #! /usr/bin/env bash
 
-network_ip_get () { #HELP <container> <network>\t\t\t\t\t\tList <container> ip address on <network_id>
+network_ip_get () { #HELP <container> <network>|List <container> ip address on <network_id>
   shift
 
   local endpoint method http_code

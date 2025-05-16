@@ -1,6 +1,6 @@
 #! /usr/bin/env bash
 
-image_tag_defined () { #HELP <image> <tag>\t\t\t\t\t\tSucceed if the <image>:<tag> is found. Fail otherwise
+image_tag_defined () { #HELP <image> <tag>|Succeed if the <image>:<tag> is found. Fail otherwise
   shift
 
   local filters endpoint method http_code

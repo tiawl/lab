@@ -6,7 +6,10 @@ shebangless () {
 
 # executed by setup.sh
 compile () {
-  on errexit errtrace noclobber nounset pipefail lastpipe extglob
+  on errexit errtrace noclobber nounset pipefail lastpipe extglob checkwinsize
+
+  # (:;:) is a micro sleep to ensure the variables are exported immediately.
+  (:;:)
 
   harden base64
   harden cat
@@ -21,13 +24,48 @@ compile () {
   version="${version%-*}"
   version="${version%\.*}.${version#*-}"
   help="$(on globstar
+    find_max_size () {
+      cols=
+      if ge "${#entry}" "${COLUMNS}"
+      then
+        cols="$(( ${COLUMNS} - 1 ))"
+        while str not eq "${entry:${cols}:1}" ' '; do (( cols-=1 )); done
+        (( cols+=1 ))
+      fi
+    }
+    declare -a lines
+    max_width='0'
     for src in "${SDIR}/src"/**/*
     do
       if is file "${src}"
       then
-        sed -n 's/^\([a-zA-Z_][a-zA-Z0-9_]*\)\s*()\s*{\s*#HELP/\t\1\t/p' "${src}" | sed ':loop; s/^\(\t[^\t]*\)_/\1 /; t loop'
+        line="$(sed -n 's/^\([a-zA-Z_][a-zA-Z0-9_]*\)\s*()\s*{\s*#HELP/\1/p' "${src}" | sed ':loop; s/^\([^[:space:]_]\+\)_/\1 /; t loop')"
+        if str not empty "${line:-}"
+        then
+          lines+=( "${line}" )
+        fi
       fi
-    done)"
+    done
+    for line in "${lines[@]}"
+    do
+      mapfile -t -d '|' split <<< "${line}"
+      max_width="$(( ${#split[0]} > ${max_width} ? ${#split[0]} : ${max_width} ))"
+    done
+    for line in "${lines[@]}"
+    do
+      mapfile -t -d '|' split <<< "${line}"
+      printf -v entry -- "        %-${max_width}s %s" "${split[0]}" "${split[1]%$'\n'}"
+      find_max_size
+      printf '%s\\n' "${entry:0:${cols:-"${COLUMNS}"}}"
+      entry="${entry:${cols:-"${COLUMNS}"}}"
+      while gt "${#entry}" '0'
+      do
+        find_max_size
+        printf "        %${max_width}s %s\\n" '' "${entry:0:${cols:-"${COLUMNS}"}}"
+        entry="${entry:${cols:-"${COLUMNS}"}}"
+      done
+    done
+  )"
   readonly name version help
 
   rm -rf "${SDIR}/bin"

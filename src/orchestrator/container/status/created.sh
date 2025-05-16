@@ -1,6 +1,6 @@
 #! /usr/bin/env bash
 
-container_status_created () { #HELP <container>\t\t\t\t\tSucceed if the given <container> is created
+container_status_created () { #HELP <container>|Succeed if the given <container> is created
   shift
 
   local endpoint method http_code

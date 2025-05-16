@@ -1,6 +1,6 @@
 #! /usr/bin/env bash
 
-image_remove () { #HELP <image> <tag>\t\t\t\t\t\t\tRemove <image>
+image_remove () { #HELP <image> <tag>|Remove <image>
   shift
 
   local endpoint method http_code

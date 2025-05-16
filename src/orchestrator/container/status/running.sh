@@ -1,6 +1,6 @@
 #! /usr/bin/env bash
 
-container_status_running () { #HELP <container>\t\t\t\t\tSucceed if the given <container> is running 
+container_status_running () { #HELP <container>|Succeed if the given <container> is running 
   shift
 
   local endpoint method http_code

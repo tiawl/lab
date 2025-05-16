@@ -1,6 +1,6 @@
 #! /usr/bin/env bash
 
-container_stop () { #HELP <container_name>\t\t\t\t\t\tStop running <container_name>
+container_stop () { #HELP <container_name>|Stop running <container_name>
   shift
 
   local endpoint method http_code

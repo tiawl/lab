@@ -1,6 +1,6 @@
 #! /usr/bin/env bash
 
-container_status_get () { #HELP <container>\t\t\t\t\t\tReturn the status of the given <container>
+container_status_get () { #HELP <container>|Return the status of the given <container>
   shift
 
   local endpoint method http_code

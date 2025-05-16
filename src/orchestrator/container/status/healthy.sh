@@ -1,6 +1,6 @@
 #! /usr/bin/env bash
 
-container_status_healthy () { #HELP <container>\t\t\t\t\tSucceed if the given <container> is healthy
+container_status_healthy () { #HELP <container>|Succeed if the given <container> is healthy
   shift
 
   local endpoint method http_code

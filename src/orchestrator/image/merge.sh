@@ -1,6 +1,6 @@
 #! /usr/bin/env bash
 
-image_merge () { #HELP <repository> <base_image> [<context> <key-value map>] [<context> <key-value map>] [...]\t\t\t\tBuild an image from multiple Dockerfiles
+image_merge () { #HELP <repository> <image> [<context> <buildargs>] [<context> <buildargs>] [...]|Build an image from multiple Dockerfiles
   shift
 
   local repo i prev
