@@ -8,8 +8,7 @@ container () {
   ( 'remove' ) : ;;
   ( 'up' ) container create "${@}"; container start "${@}" ;;
   ( 'down' ) : ;;
-  ( 'created' ) : ;;
-  ( 'running' ) : ;;
+  ( 'status' ) container_status "${@}" ;;
   ( 'resource' ) container_resource "${@}" ;;
   ( * ) return 1 ;;
   esac

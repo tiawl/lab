@@ -139,7 +139,7 @@ bash_setup () {
   sep[image]='/'
   sep[tag]=':'
   sep[container]='.'
-  version[docker_api]='v1.48'
+  version[docker_api]='v1.49'
   path[docker_socket]='/var/run/docker.sock'
   readonly sep
 }
