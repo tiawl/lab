@@ -13,6 +13,7 @@ group:
       - - literal: ssh_home
       - - literal: key_name
       - - literal: bounce_ip
+      - - literal: bounce_tag
       scope: local
   - assign:
       vars:
@@ -94,15 +95,14 @@ group:
                 var: version
         - image:
             prune:
-              matching:
-              - key:
-                - literal: image
-                var: loc
-              - literal: alpine
-              - key:
-                - literal: tag
-                special: sep
-              - literal: '*'
+            - key:
+              - literal: image
+              var: loc
+            - literal: alpine
+            - key:
+              - literal: tag
+              special: sep
+            - literal: '*'
         - image:
             tag:
               create:
@@ -146,45 +146,113 @@ group:
   - readonly:
     - - literal: ssh_home
     - - literal: key_name
-  - image:
-      build:
-        args:
-        - key:
-          - literal: FROM
-          value:
-          - key:
-            - literal: image
-            var: loc
-          - literal: alpine
-          - key:
-            - literal: tag
-            special: sep
-          - key:
-            - literal: alpine
-            var: version
-        - key:
-          - literal: KEY_NAME
-          value:
-          - var: key_name
-        - key:
-          - literal: USER
-          value:
-          - special: USER
-        - key:
-          - literal: SSH_HOME
-          value:
-          - var: ssh_home
-        - key:
-          - literal: UID
-          value:
-          - special: UID
-        context:
-        - literal: ./dockerfiles/bounce
-        image:
-        - key:
-          - literal: image
-          var: project
-        - literal: bounce
+  - register:
+      into:
+        var: bounce_tag
+      group:
+        commands:
+        - image:
+            tag:
+              compute:
+                context:
+                - literal: ./dockerfiles/bounce
+                buildargs:
+                - key:
+                  - literal: FROM
+                  value:
+                  - key:
+                    - literal: image
+                    var: loc
+                  - literal: alpine
+                  - key:
+                    - literal: tag
+                    special: sep
+                  - key:
+                    - literal: alpine
+                    var: version
+                - key:
+                  - literal: KEY_NAME
+                  value:
+                  - var: key_name
+                - key:
+                  - literal: USER
+                  value:
+                  - special: USER
+                - key:
+                  - literal: SSH_HOME
+                  value:
+                  - var: ssh_home
+                - key:
+                  - literal: UID
+                  value:
+                  - special: UID
+  - if:
+      not:
+        group:
+          commands:
+          - image:
+              tag:
+                defined:
+                  image:
+                  - key:
+                    - literal: image
+                    var: project
+                  - literal: bounce
+                  tag:
+                  - var: bounce_tag
+      group:
+        commands:
+        - image:
+            prune:
+            - key:
+              - literal: image
+              var: project
+            - literal: bounce
+            - key:
+              - literal: tag
+              special: sep
+            - literal: '*'
+        - image:
+            build:
+              args:
+              - key:
+                - literal: FROM
+                value:
+                - key:
+                  - literal: image
+                  var: loc
+                - literal: alpine
+                - key:
+                  - literal: tag
+                  special: sep
+                - key:
+                  - literal: alpine
+                  var: version
+              - key:
+                - literal: KEY_NAME
+                value:
+                - var: key_name
+              - key:
+                - literal: USER
+                value:
+                - special: USER
+              - key:
+                - literal: SSH_HOME
+                value:
+                - var: ssh_home
+              - key:
+                - literal: UID
+                value:
+                - special: UID
+              context:
+              - literal: ./dockerfiles/bounce
+              image:
+              - key:
+                - literal: image
+                var: project
+              - literal: bounce
+              tag:
+              - var: bounce_tag
   - mutate:
       name:
         var: path

@@ -12,6 +12,7 @@
 #             while [[ expression ]]; do list-2; done
 #   - for:    for (( <expr1> ; <expr2> ; <expr3> )) ; do <list> ; done
 # - async/wait
+# - inventory
 
 {
   user: "__",
@@ -198,6 +199,14 @@ def orchestrator(mode): {
               ($create.to.image | sanitize(mode)) + " " +
               ($create.to.tag | sanitize(mode))
           ) else null end
+      ) catch null),
+      compute: (try (
+        .image.tag.compute as $compute |
+          if $compute then (
+            "image tag compute " +
+              ($compute.context | sanitize(mode)) + " " +
+              ([$compute.buildargs[][] | sanitize(mode)] | join(" "))
+          ) else null end
       ) catch null)
     },
     pull: (try (
@@ -222,7 +231,7 @@ def orchestrator(mode): {
       .image.prune as $prune |
         if $prune then (
           "image prune " +
-            ($prune.matching | sanitize(mode))
+            ($prune | sanitize(mode))
         ) else null end
     ) catch null),
     build: (try (
@@ -230,6 +239,7 @@ def orchestrator(mode): {
         if $build then (
           "image build " +
             ($build.image | sanitize(mode)) + " " +
+            ($build.tag | sanitize(mode)) + " " +
             ($build.context | sanitize(mode)) + " " +
             ([$build.args[][] | sanitize(mode)] | join(" "))
         ) else null end
