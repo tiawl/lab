@@ -252,28 +252,28 @@ def orchestrator(mode): {
         .container.status.get as $get |
           if $get then (
             "container status get " +
-              ($get.name | sanitize(mode))
+              ($get | sanitize(mode))
           ) else null end
       ) catch null),
       created: (try (
         .container.status.created as $created |
           if $created then (
             "container status created " +
-              ($created.name | sanitize(mode))
+              ($created | sanitize(mode))
           ) else null end
       ) catch null),
       running: (try (
         .container.status.running as $running |
           if $running then (
             "container status running " +
-              ($running.name | sanitize(mode))
+              ($running | sanitize(mode))
           ) else null end
       ) catch null),
       healthy: (try (
         .container.status.healthy as $healthy |
           if $healthy then (
             "container status healthy " +
-              ($healthy.name | sanitize(mode))
+              ($healthy | sanitize(mode))
           ) else null end
       ) catch null)
     },
