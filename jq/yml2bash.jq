@@ -968,7 +968,7 @@ def internals(level): (
             {mutate: {name: {var: "ref"}, value: [[{parameter: 1}]]}},
             {assign: {vars: [[{literal: "source_me"}]], type: "indexed", scope: "local"}},
             {coproc: {name: "CAT", group: {commands: [{raw: {command: "cat", args: []}}]}}},
-            {group: {commands: [{register: {into: {var: "ref"}, group: {commands: [{source: {string: [[{parameter: 2}]]}}, {group: {commands: [{raw: {command: "declare", args:[[{literal: "-f"}], [{literal: ($NAMESPACE.internal + "autoincr")}]]}}], redirections: [{output: {left: {fd: 1}, right: {fd: 3}}}]}}]}}}], redirections: [{output: {left: {fd: 3}, right: {var: "CAT", index: 1}}}]}},
+            {register: {into: {var: "ref"}, group: {commands: [{source: {string: [[{parameter: 2}]]}}, {group: {commands: [{raw: {command: "declare", args:[[{literal: "-f"}], [{literal: ($NAMESPACE.internal + "autoincr")}]]}}], redirections: [{output: {left: {fd: 1}, right: {var: "CAT", index: 1}}}]}}]}}},
             {raw: {command: "exec", args: [[{unsafe: "{CAT[1]}>&-"}]]}},
             {group: {commands: [{raw: {command: "mapfile", args: [[{literal: "source_me"}]]}}], redirections: [{input: {var: "CAT", index: 0}}]}},
             {source: {string: [[{var: "source_me", key: [{char: "atsign"}]}]]}}

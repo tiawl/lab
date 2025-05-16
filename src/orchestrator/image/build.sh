@@ -42,21 +42,21 @@ image_build () { #HELP <repository> <context> [<key> <value>] [<key> <value>] [.
 
     local json_object http_code
     coproc HTTP_CODE { sed "${sed[colored_http_code]}"; }
-    defer 'exec {HTTP_CODE[1]}>&-; readl http_code <&${HTTP_CODE[0]}; wait "${HTTP_CODE_PID}" 2> /dev/null || :; printf "%s\n" "${http_code}" >&2'
+    defer 'exec {HTTP_CODE[1]}>&- 4>&-; readl http_code <&${HTTP_CODE[0]}; wait "${HTTP_CODE_PID}" 2> /dev/null || :; printf "%s\n" "${http_code}" >&2'
 
-    {
-      tar --directory "${context}" --create --file=- . \
-        | "${curl_cmd[@]}" "${endpoint}" 2>&4 \
-        | while read -r json_object
-          do
-            printf '%s' "${json_object}" \
-              | {
-                  filter_docker_output 2>&3 \
-                    | decode_buildkit_protobuf
-                } 3>&1 \
-              | sed "${sed[protobuf2json]}" \
-              | gojq --raw-output "${jq[image-build-logging]}" --arg image "${repo}" >&2
-          done
-    } 4>&${HTTP_CODE[1]}
+    exec 4>&${HTTP_CODE[1]}
+
+    tar --directory "${context}" --create --file=- . \
+      | "${curl_cmd[@]}" "${endpoint}" 2>&4 \
+      | while read -r json_object
+        do
+          printf '%s' "${json_object}" \
+            | {
+                filter_docker_output 2>&3 \
+                  | decode_buildkit_protobuf
+              } 3>&1 \
+            | sed "${sed[protobuf2json]}" \
+            | gojq --raw-output "${jq[image-build-logging]}" --arg image "${repo}" >&2
+        done
   fi
 }

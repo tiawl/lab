@@ -52,14 +52,15 @@ capture () {
 }
 
 defer () {
-  local stage prev_return_trap pfx
+  local stage prev_return_trap prev_err_trap pfx
   stage='0'
   pfx="__${FUNCNAME[0]#s}_${FUNCNAME[1]}_"
   if is not func "${pfx}0"
   then
     prev_return_trap="$(trap -p RETURN)"
-    trap -- "if str eq \"\${FUNCNAME[0]}\" \"${FUNCNAME[1]}\"; then ${pfx}0; ${prev_return_trap:-trap - RETURN ERR}${prev_return_trap:+ ERR}; fi" RETURN
-    trap -- "if str eq \"\${FUNCNAME[0]}\" \"${FUNCNAME[1]}\"; then ${pfx}0; fi" ERR
+    prev_err_trap="$(trap -p ERR)"
+    trap -- "if str eq \"\${FUNCNAME[0]}\" \"${FUNCNAME[1]}\"; then ${pfx}0; ${prev_return_trap:-trap - RETURN}; ${prev_err_trap:-trap - ERR}; fi" RETURN
+    trap -- "${pfx}0; ${prev_return_trap:-trap - RETURN}; ${prev_err_trap:-trap - ERR}" ERR
   fi
   while is func "${pfx}$(( ++stage ))"; do :; done
   (( stage-- ))
