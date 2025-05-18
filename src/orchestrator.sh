@@ -27,8 +27,7 @@ init () {
   then
     backend='docker'
   else
-    printf 'No available backend\n' >&2
-    return 1
+    error 'No available backend'
   fi
 
   # TODO: remove this later

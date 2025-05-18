@@ -17,8 +17,7 @@ runner_dry () { #HELP <yaml_file>|Display the runner bash script without executi
   fi
   if is not file "${yml}"
   then
-    printf 'Can not find %s\n' "${1}" >&2
-    return 1
+    error 'Can not find %s' "${1}"
   fi
 
   gojq --yaml-input --raw-output "${jq[yml2bash]}" "${yml}" --args "${rainbow[@]}" --arg env "$(

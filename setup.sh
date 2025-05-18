@@ -33,11 +33,46 @@ setup () (
 
   # cleanup done: now it is time to define needed functions
 
+  not () { ! "${@}"; }
+  eq () { (( "${1}" == "${2}" )); }
+  gt () { (( "${1}" > "${2}" )); }
+  lt () { (( "${1}" < "${2}" )); }
+  ge () { (( "${1}" >= "${2}" )); }
+  le () { (( "${1}" <= "${2}" )); }
+
+  is () {
+    case "${1}" in
+    ( 'not' ) shift; not is "${@}" ;;
+    ( 'present' ) [ -e "${2}" ] ;;
+    ( 'file' ) [ -f "${2}" ] ;;
+    ( 'dir' ) [ -d "${2}" ] ;;
+    ( 'socket' ) [ -S "${2}" ] ;;
+    esac
+  }
+
+  can () {
+    case "${1}" in
+    ( 'not' ) shift; not can "${@}" ;;
+    ( 'exec' ) [ -x "${2}" ] ;;
+    esac
+  }
+
+  str () {
+    case "${1}" in
+    ( 'not' ) shift; not str "${@}" ;;
+    ( 'empty' ) [ -z "${2}" ] ;;
+    ( 'eq' ) [ "${2}" = "${3}" ] ;;
+    esac
+  }
+
   dirname () {
     set -- "${1:-.}"
     set -- "${1%%"${1##*[!/]}"}"
 
-    [ "${1##*/*}" ] && set -- '.'
+    if not str empty "${1##*/*}"
+    then
+      set -- '.'
+    fi
 
     set -- "${1%/*}"
     set -- "${1%%"${1##*[!/]}"}"
@@ -47,13 +82,17 @@ setup () (
   sdir="$(CDPATH='' cd -- "$(dirname -- "${0}")" > /dev/null 2>&1; pwd)"
   readonly sdir
 
-  . "${sdir}/src/utils.sh"
+  has () {
+    case "${1}" in
+    ( 'not' ) shift; not has "${@}" ;;
+    ( * ) can exec "$(command -v "${1}" 2> /dev/null || :)" ;;
+    esac
+  }
 
   if is not file /etc/os-release
   then
     # get_distribution () comment into https://get.docker.com/ script
-    printf 'Can not find /etc/os-release. The OS where this script is running is probably not officialy supported by Docker.\n' >&2
-    return 1
+    error 'Can not find /etc/os-release. The OS where this script is running is probably not officialy supported by Docker.'
   fi
 
   dist="$(. /etc/os-release && printf '%s\n' "${ID}")"
@@ -85,13 +124,11 @@ setup () (
         bc \
         bash curl git gojq protobuf-compiler sed tar
     fi ;;
-  ( * )
-    printf 'Unknown OS: %s\n' "${dist}" >&2
-    return 1 ;;
+  ( * ) error 'Unknown OS: %s' "${dist}" ;;
   esac
 
   # install docker
-  if is not cmd 'docker'
+  if has not 'docker'
   then
     curl --silent --show-error https://get.docker.com | sudo sh
   fi
@@ -118,7 +155,7 @@ setup () (
 
   # TODO: add buildkitd socket
 
-  exec env --ignore-environment SDIR="${sdir}" BASH_ENV="${sdir}/src/utils.bash" bash --norc --noprofile "${sdir}/compile.sh"
+  exec env --ignore-environment SDIR="${sdir}" BASH_ENV="${sdir}/src/utils.sh" bash --norc --noprofile "${sdir}/compile.sh"
 )
 
 setup "${@}"
