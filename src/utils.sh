@@ -42,15 +42,9 @@ is () {
   ( 'file' ) [[ -f "${2}" ]] ;;
   ( 'dir' ) [[ -d "${2}" ]] ;;
   ( 'socket' ) [[ -S "${2}" ]] ;;
-  ( 'array' )
-    if str not eq "$(basename "${BASH:-unknown}")" 'bash'; then return 1; fi
-    case "$(declare -p "${2}" 2> /dev/null)" in ( "declare -a ${2}" ) return 0 ;; ( * ) return 1 ;; esac ;;
-  ( 'map' )
-    if str not eq "$(basename "${BASH:-unknown}")" 'bash'; then return 1; fi
-    case "$(declare -p "${2}" 2> /dev/null)" in ( "declare -A ${2}" ) return 0 ;; ( * ) return 1 ;; esac ;;
-  ( 'func' )
-    if str not eq "$(basename "${BASH:-unknown}")" 'bash'; then return 1; fi
-    declare -F "${2}" > /dev/null ;;
+  ( 'array' ) case "$(declare -p "${2}" 2> /dev/null)" in ( "declare -a ${2}" ) return 0 ;; ( * ) return 1 ;; esac ;;
+  ( 'map' ) case "$(declare -p "${2}" 2> /dev/null)" in ( "declare -A ${2}" ) return 0 ;; ( * ) return 1 ;; esac ;;
+  ( 'func' ) declare -F "${2}" > /dev/null ;;
   esac
 }
 

@@ -1,6 +1,6 @@
 #! /usr/bin/env bash
 
-main () {
+update () {
   set -C -e -u -x -o pipefail
   shopt -s lastpipe extglob
 
@@ -19,4 +19,4 @@ main () {
   protoc -o ./descriptor_sets/control.proto --include_imports --proto_path=. ./vendor/api/services/control/control.proto
 }
 
-main "${@}"
+update "${@}"
