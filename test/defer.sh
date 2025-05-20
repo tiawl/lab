@@ -3,16 +3,32 @@
 source src/utils.sh
 
 defer () {
-  local stage pfx ppfx sep uuid prev_return_trap
+  local stage pfx ppfx sep old_ifs prev_return_trap min max
+  local -a caller
+  old_ifs="${IFS}"
   stage='0'
   sep='_'
   prev_return_trap="$(trap -p RETURN)"
   prev_return_trap="${prev_return_trap#"trap -- '' RETURN"}"
-  uuid="${FUNCNAME[*]:1} ${BASH_LINENO[*]:2}"
-  uuid="${uuid// /"${sep}"}"
+  readonly old_ifs sep prev_return_trap
+
+  caller=("${BASH_LINENO[@]:2}" "${FUNCNAME[@]:1}")
+  min='0'
+  max="$(( ${#caller[@]} -1 ))"
+  while lt "${min}" "${max}"
+  do
+    x="${caller["${min}"]}"
+    caller["${min}"]="${caller["${max}"]}"
+    caller["${max}"]="${x}"
+    (( min++, max-- ))
+  done
+  IFS="${sep}"
+  caller="${caller[*]}"
+  IFS="${old_ifs}"
   ppfx="${sep}${sep}deferred${sep}"
-  pfx="${ppfx}${FUNCNAME[1]}${sep}${uuid}${sep}"
-  readonly pfx ppfx sep uuid prev_return_trap
+  pfx="${ppfx}${caller}${sep}"
+  readonly pfx ppfx caller
+
   if is not func "${pfx}0"
   then
     trap -- "
@@ -59,6 +75,7 @@ on functrace
 
   run a
   eq "${status}" '0'
+  eq "${#lines[@]}" '3'
   str eq "${lines[0]}" 'a: Init'
   str eq "${lines[1]}" 'a: Main loop'
   str eq "${lines[2]}" 'a: Cleanup'
@@ -75,6 +92,7 @@ on functrace
 
   run a
   eq "${status}" '0'
+  eq "${#lines[@]}" '5'
   str eq "${lines[0]}" 'a: Init'
   str eq "${lines[1]}" 'a: Main loop'
   str eq "${lines[2]}" 'a: Cleanup:'
@@ -95,9 +113,9 @@ on functrace
     b
   }
 
-  #set -x
   run a
   eq "${status}" '0'
+  eq "${#lines[@]}" '4'
   str eq "${lines[0]}" 'b: Cleanup:'
   str eq "${lines[1]}" 'b:   Freeing memory'
   str eq "${lines[2]}" 'a: Cleanup:'
@@ -139,6 +157,7 @@ on functrace
 
   run a
   eq "${status}" '0'
+  eq "${#lines[@]}" '10'
   str eq "${lines[0]}" 'b: Cleanup:'
   str eq "${lines[1]}" 'b:   Freeing memory'
   str eq "${lines[2]}" 'e: Cleanup:'
@@ -154,3 +173,4 @@ on functrace
 # "recursive" case
 # "error" case
 # "use in defer in function that use defer" case
+# errdefer ??
