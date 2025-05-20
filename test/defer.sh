@@ -3,6 +3,11 @@
 source src/utils.sh
 
 defer () {
+  if is not set functrace
+  then
+    error 'functrace bash option must be enabled to use defer: %s' "${-}"
+  fi
+
   local stage pfx ppfx sep old_ifs prev_return_trap min max x
   local -a caller
   old_ifs="${IFS}"
@@ -67,8 +72,6 @@ fi
   "
 }
 
-on functrace
-
 @test "simple defer" {
   a() {
     defer "echo '${FUNCNAME[0]}: Cleanup'"
@@ -76,7 +79,12 @@ on functrace
     echo "${FUNCNAME[0]}: Main loop"
   }
 
-  run a
+  run_me() {
+    on functrace
+    a
+  }
+
+  run run_me
   eq "${status}" '0'
   eq "${#lines[@]}" '3'
   str eq "${lines[0]}" 'a: Init'
@@ -93,7 +101,12 @@ on functrace
     echo "${FUNCNAME[0]}: Main loop"
   }
 
-  run a
+  run_me() {
+    on functrace
+    a
+  }
+
+  run run_me
   eq "${status}" '0'
   eq "${#lines[@]}" '5'
   str eq "${lines[0]}" 'a: Init'
@@ -103,7 +116,7 @@ on functrace
   str eq "${lines[4]}" 'a:   Freeing memory'
 }
 
-@test "nested function 1" {
+@test "multiple defers into nested functions 1" {
   b() {
     defer "echo '${FUNCNAME[0]}: Cleanup:'"
     defer "echo '${FUNCNAME[0]}:   Freeing memory'"
@@ -116,7 +129,12 @@ on functrace
     b
   }
 
-  run a
+  run_me() {
+    on functrace
+    a
+  }
+
+  run run_me
   eq "${status}" '0'
   eq "${#lines[@]}" '4'
   str eq "${lines[0]}" 'b: Cleanup:'
@@ -125,7 +143,7 @@ on functrace
   str eq "${lines[3]}" 'a:   Releasing resources'
 }
 
-@test "nested function 2" {
+@test "multiple defers into nested functions 2" {
   e() {
     defer "echo '${FUNCNAME[0]}: Cleanup:'"
     defer "echo '${FUNCNAME[0]}:   Cook a cake'"
@@ -158,7 +176,12 @@ on functrace
     c
   }
 
-  run a
+  run_me() {
+    on functrace
+    a
+  }
+
+  run run_me
   eq "${status}" '0'
   eq "${#lines[@]}" '10'
   str eq "${lines[0]}" 'b: Cleanup:'
@@ -173,7 +196,7 @@ on functrace
   str eq "${lines[9]}" 'a:   Releasing resources'
 }
 
-@test "recursive function" {
+@test "multiple defers into recursive function" {
   a() {
     defer "echo '${FUNCNAME[0]} ${1}: Cleanup:'"
     defer "echo '${FUNCNAME[0]} ${1}:   Removing temporary file'"
@@ -184,7 +207,12 @@ on functrace
     fi
   }
 
-  run a 1
+  run_me() {
+    on functrace
+    a 1
+  }
+
+  run run_me
   eq "${status}" '0'
   eq "${#lines[@]}" '6'
   str eq "${lines[0]}" 'a 3: Cleanup:'
@@ -207,7 +235,12 @@ on functrace
     defer 'b'
   }
 
-  run a
+  run_me() {
+    on functrace
+    a
+  }
+
+  run run_me
   eq "${status}" '0'
   eq "${#lines[@]}" '4'
   str eq "${lines[0]}" 'a: Cleanup:'
@@ -227,7 +260,12 @@ on functrace
     fi
   }
 
-  run a 1
+  run_me() {
+    on functrace
+    a 1
+  }
+
+  run run_me
   eq "${status}" '0'
   eq "${#lines[@]}" '6'
   str eq "${lines[0]}" 'a 1: Cleanup:'

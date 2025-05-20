@@ -45,6 +45,8 @@ is () {
   ( 'array' ) case "$(declare -p "${2}" 2> /dev/null)" in ( "declare -a ${2}" ) return 0 ;; ( * ) return 1 ;; esac ;;
   ( 'map' ) case "$(declare -p "${2}" 2> /dev/null)" in ( "declare -A ${2}" ) return 0 ;; ( * ) return 1 ;; esac ;;
   ( 'func' ) declare -F "${2}" > /dev/null ;;
+  ( 'var' ) [[ -v "${2}" ]] ;;
+  ( 'set' ) [[ -o "${2}" ]] || shopt -q "${2}" 2> /dev/null ;;
   esac
 }
 
