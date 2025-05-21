@@ -47,6 +47,7 @@ is () {
   ( 'func' ) declare -F "${2}" > /dev/null ;;
   ( 'var' ) [[ -v "${2}" ]] ;;
   ( 'set' ) [[ -o "${2}" ]] || shopt -q "${2}" 2> /dev/null ;;
+  ( 'uint' ) case "${2}" in ( ''|*[!0-9]* ) return 1 ;; ( * ) return 0 ;; esac ;;
   esac
 }
 
@@ -105,13 +106,6 @@ off () {
   done
 }
 
-source () {
-  case "${-}" in
-  ( *T* ) trap -- "$(trap -p RETURN)" RETURN ;;
-  esac
-  . "${@}"
-}
-
 capture () {
   set -- "$(shopt -p)"
   source /proc/self/fd/0 <<< "restore () {
@@ -127,25 +121,87 @@ capture () {
 }
 
 defer () {
-  local stage prev_return_trap prev_err_trap pfx
+  local opt
+  for opt in functrace errtrace
+  do
+    if is not set "${opt}"
+    then
+      error '%s bash option must be enabled to use defer: %s' "${opt}" "${-}"
+    fi
+  done
+
+  local stage pfx ppfx c old_ifs prev_return_trap prev_err_trap min max x
+  local -a caller
+  old_ifs="${IFS}"
   stage='0'
-  pfx="__${FUNCNAME[0]#s}_${FUNCNAME[1]}_"
+  c='_'
+  prev_return_trap="$(trap -p RETURN)"
+  prev_return_trap="${prev_return_trap#"trap -- '' RETURN"}"
+  readonly old_ifs c prev_return_trap
+
+  caller=("${BASH_LINENO[@]:2}" "${FUNCNAME[@]:1}")
+  min='0'
+  max="$(( ${#caller[@]} -1 ))"
+  while lt "${min}" "${max}"
+  do
+    x="${caller["${min}"]}"
+    caller["${min}"]="${caller["${max}"]}"
+    caller["${max}"]="${x}"
+    (( min++, max-- ))
+  done
+  ppfx="${c}${c}deferred${c}"
+  IFS="${c}"
+  pfx="${ppfx}${caller[*]}${c}"
+  IFS="${old_ifs}"
+  readonly pfx ppfx caller
+
   if is not func "${pfx}0"
   then
-    prev_return_trap="$(trap -p RETURN)"
-    trap -- "if str eq \"\${FUNCNAME[0]}\" \"${FUNCNAME[1]}\"; then ${pfx}0; ${prev_return_trap:-trap - RETURN}; ${prev_err_trap:-trap - ERR}; fi" RETURN
     prev_err_trap="$(trap -p ERR)"
-    trap -- "${pfx}0; ${prev_return_trap:-trap - RETURN}; ${prev_err_trap:-trap - ERR}" ERR
+    prev_err_trap="${prev_err_trap#"trap -- '' ERR"}"
+    readonly prev_err_trap
+    trap -- "
+      if str eq \"\${FUNCNAME[0]}\" \"${FUNCNAME[1]}\"
+      then
+        ${pfx}0
+        ${prev_return_trap:-trap - RETURN}
+        ${prev_err_trap:-trap - ERR}
+      fi
+      " RETURN
+    trap -- "
+      ${pfx}0;
+      ${prev_return_trap:-trap - RETURN}
+      ${prev_err_trap:-trap - ERR}
+    " ERR
   fi
   while is func "${pfx}$(( ++stage ))"; do :; done
   (( stage-- ))
-  source /proc/self/fd/0 <<< "${pfx}${stage} () { ${*}; ${pfx}$(( stage + 1 )); unset \"\${FUNCNAME[0]}\"; }; ${pfx}$(( stage + 1 )) () { unset \"\${FUNCNAME[0]}\"; }; declare -t -f ${pfx}${stage} ${pfx}$(( stage + 1 ))"
+  source /proc/self/fd/0 <<< "
+    ${pfx}${stage} () {
+      local before after
+      on noglob
+      before=(\$(compgen -A function -X '!${ppfx}*0'))
+      off noglob
+      ${*}
+      on noglob
+      after=(\$(compgen -A function -X '!${ppfx}*0'))
+      off noglob
+      if str not eq \"\${before[*]}\" \"\${after[*]}\"
+      then
+        local deferred
+        for deferred in \$(gojq -n -r '\$ARGS.positional | group_by(.) | .[] | select(length == 1) | .[0]' --args \"\${before[@]}\" \"\${after[@]}\")
+        do
+          \${deferred}
+        done
+      fi
+      ${pfx}$(( stage + 1 ))
+      unset \"\${FUNCNAME[0]}\"
+    }
+    ${pfx}$(( stage + 1 )) () {
+      unset \"\${FUNCNAME[0]}\"
+    }
+  "
 }
-
-# sdefer definition:
-set -- "$(declare -f defer)" "${@}"
-source /proc/self/fd/0 <<< "s${1/'${*}'/'(${*})'}"
-shift
 
 # 1) fail if no external tool exists with the specified name
 # 2) wrap the external tool as a function
@@ -229,4 +285,104 @@ url () {
     : "${2//+/ }"
     printf '%b\n' "${_//%/\\x}" ;;
   esac
+}
+
+nchar () {
+  if not eq "${#2}" '1'
+  then
+    error 'Second argument must be a lonely char'
+  fi
+  set -- "${1//[^"${2}"]}"
+  printf -v NCHAR '%d' "${#1}"
+}
+
+gengetopt () {
+  local reset_ifs c short short_noarg short_1arg long_1arg_pattern opts
+  local -a opt long long_1arg
+  c=':'
+  readonly c
+  reset_ifs="${IFS}"
+  until eq "${#}" '0'
+  do
+    nchar "${1}" "${c}"
+    if not eq "${NCHAR}" '2'
+    then
+      error 'Each argument must match this pattern: "short-form%clong-form%cnb-args"' "${c}" "${c}"
+    fi
+    on noglob
+    IFS="${c}"
+    opt=( ${1} )
+    IFS="${reset_ifs}"
+    off noglob
+    shift
+    if gt "${#opt[0]}" '1'
+    then
+      error 'short-form must be a lonely char or omitted'
+    fi
+    if eq "${#opt[1]}" '1'
+    then
+      error 'long-form must be a string of at least 2 chars or omitted'
+    fi
+    if str empty "${opt[0]}" && str empty "${opt[1]}"
+    then
+      error 'You can not omit neither short-form and long-form'
+    fi
+    if is not uint "${opt[2]}"
+    then
+      error 'nb-args must be an unsigned integer'
+    fi
+    case "${opt[0]}${opt[1]}" in
+    ( *[[:space:]]* ) error 'Space chars forbidden into short-form and long-form' ;;
+    esac
+    if str not empty "${opt[0]}"
+    then
+      case "${short}" in
+      ( *"${opt[0]}"* ) error '"%s" short-form is already used' "${opt[0]}" ;;
+      esac
+    fi
+    if str not empty "${opt[1]}"
+    then
+      IFS=' '
+      case " ${long[*]} " in
+      ( *" ${opt[1]} "* ) error '"%s" long-form is already used' "${opt[1]}" ;;
+      esac
+      IFS="${reset_ifs}"
+    fi
+    if str not empty "${opt[0]}"; then short="${short:-}${opt[0]}"; fi
+    if str not empty "${opt[1]}"; then long+=( "${opt[1]}" ); fi
+    case "${opt[2]}" in
+    ( '0' )
+      if str not empty "${opt[0]}"; then short_noarg="${short_noarg:-}${opt[0]}"; fi ;;
+    ( '1' )
+      if str not empty "${opt[0]}"; then short_1arg="${short_1arg:-}${opt[0]}"; fi
+      if str not empty "${opt[1]}"; then long_1arg+=( "--${opt[1]}=*" ); fi ;;
+    esac
+    opts="${opts}${opts:+        }( ${opt[0]:+-}${opt[0]}${opt[0]:+"${opt[1]:+|}"}${opt[1]:+--}${opt[1]} )${opt[0]:+" getopt['${opt[0]}']='true';"}${opt[1]:+" getopt['${opt[1]}']='true';"} shift ${opt[2]} ;;"$'\n'
+  done
+  IFS='|'
+  long_1arg_pattern="${long_1arg[*]}"
+  IFS="${reset_ifs}"
+  source /proc/self/fd/0 <<< "
+    getopt () {
+      global -A getopt
+      until eq \"\${#}\" '0'
+      do
+        case \"\${1}\" in
+${short_noarg:+"
+        # Handle '-abc' the same as '-a -bc' for short-form no-arg options
+        ( -[${short_noarg}]?* ) set -- \"\${1%\"\${1#??}\"}\" \"-\${1#??}\" \"\${@:2}\"; continue ;;
+"}${short_1arg:+"
+        # Handle '-foo' the same as '-f oo' for short-form 1-arg options
+        ( -[${short_1arg}]?* ) set -- \"\${1%\"\${1#??}\"}\" \"\${1#??}\" \"\${@:2}\"; continue ;;
+"}${long_1arg_pattern:+"
+        # Handle '--file=file1' the same as '--file file1' for long-form 1-arg options
+        ( ${long_1arg_pattern} ) set -- \"\${1%%=*}\" \"\${1#*=}\" \"\${@:2}\"; continue ;;
+"}
+        ${opts}
+        ( * ) error 'Unknown option: \"%s\"' \"\${1}\" ;;
+        esac
+        shift
+      done
+    }
+  "
 }

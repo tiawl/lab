@@ -587,15 +587,8 @@ def define(level; mode): (
 
       def defer(level; mode): (
         .defer |
-        ((keys[0] | if (test("^container$|^image$|^network$|^volume$|^runner$")) then "s" else "" end) + "defer") as $fn |
         deferrable(-1; mode) | map(
-          gsub("'"; "'\"'\"'") | (
-            if (startswith($NAMESPACE.internal + "xtrace")) then (
-              "defer '"
-            ) else (
-              $fn + " '"
-            ) end
-          ) + . + "'" | indent(level)
+          "defer '" + gsub("'"; "'\"'\"'") + "'" | indent(level)
         ) | join("\n")
       );
 
@@ -881,7 +874,7 @@ def internals(level): (
         name: "init_runner",
         group: {
           commands: [
-            {on: [[{literal: "errexit"}], [{literal: "errtrace"}], [{literal: "noclobber"}], [{literal: "nounset"}], [{literal: "pipefail"}], [{literal: "lastpipe"}], [{literal: "extglob"}]]},
+            {on: [[{literal: "errexit"}], [{literal: "inherit_errexit"}], [{literal: "errtrace"}], [{literal: "functrace"}], [{literal: "noclobber"}], [{literal: "nounset"}], [{literal: "pipefail"}], [{literal: "lastpipe"}], [{literal: "extglob"}]]},
             {raw: {command: "bash_setup", args: []}},
             {raw: {command: "load_resources", args: []}},
             {raw: {command: "init", args: []}},

@@ -6,7 +6,7 @@ shebangless () {
 
 # executed by setup.sh
 compile () {
-  on errexit errtrace noclobber nounset pipefail lastpipe extglob checkwinsize
+  on errexit inherit_errexit errtrace functrace noclobber nounset pipefail lastpipe extglob checkwinsize
 
   # (:;:) is a micro sleep to ensure the variables are exported immediately.
   (:;:)
@@ -19,7 +19,7 @@ compile () {
   harden sed
 
   local name version help
-  name='piplop'
+  name='navy'
   version="$(git -C "${SDIR}" describe --match *.*.* --tags --abbrev=9)"
   version="${version%-*}"
   version="${version%\.*}.${version#*-}"
@@ -123,7 +123,7 @@ ${name} () {
     \\command exec -c env --ignore-environment BASH="\${BASH:-}" ${name^^}_REEXEC_WITH_EMPTY_ENV='yes' bash --norc --noprofile "\${BASH_SOURCE[0]}" "\${@}" || \\command exit 1
   fi
 
-  on errexit errtrace noclobber nounset pipefail lastpipe extglob
+  on errexit inherit_errexit errtrace functrace noclobber nounset pipefail lastpipe extglob
 
   bash_setup
 
