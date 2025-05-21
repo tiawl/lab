@@ -39,7 +39,7 @@ compile () {
     do
       if is file "${src}"
       then
-        line="$(sed -n 's/^\([a-zA-Z_][a-zA-Z0-9_]*\)\s*()\s*{\s*#HELP/\1/p' "${src}" | sed ':loop; s/^\([^[:space:]_]\+\)_/\1 /; t loop')"
+        line="$(sed -n 's/^\([a-zA-Z_][a-zA-Z0-9_]*\)\s*()\s*{\s*#HELP/\1/p' "${src}" | sed ':loop; s/^\([ a-z]\+\)_/\1 /; t loop')"
         if str not empty "${line:-}"
         then
           lines+=( "${line}" )
