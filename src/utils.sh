@@ -367,17 +367,13 @@ gengetopt () {
       global -A getopt
       until eq \"\${#}\" '0'
       do
-        case \"\${1}\" in
-${short_noarg:+"
+        case \"\${1}\" in${short_noarg:+"
         # Handle '-abc' the same as '-a -bc' for short-form no-arg options
-        ( -[${short_noarg}]?* ) set -- \"\${1%\"\${1#??}\"}\" \"-\${1#??}\" \"\${@:2}\"; continue ;;
-"}${short_1arg:+"
+        ( -[${short_noarg}]?* ) set -- \"\${1%\"\${1#??}\"}\" \"-\${1#??}\" \"\${@:2}\"; continue ;;"$'\n'}${short_1arg:+"
         # Handle '-foo' the same as '-f oo' for short-form 1-arg options
-        ( -[${short_1arg}]?* ) set -- \"\${1%\"\${1#??}\"}\" \"\${1#??}\" \"\${@:2}\"; continue ;;
-"}${long_1arg_pattern:+"
+        ( -[${short_1arg}]?* ) set -- \"\${1%\"\${1#??}\"}\" \"\${1#??}\" \"\${@:2}\"; continue ;;"$'\n'}${long_1arg_pattern:+"
         # Handle '--file=file1' the same as '--file file1' for long-form 1-arg options
-        ( ${long_1arg_pattern} ) set -- \"\${1%%=*}\" \"\${1#*=}\" \"\${@:2}\"; continue ;;
-"}
+        ( ${long_1arg_pattern} ) set -- \"\${1%%=*}\" \"\${1#*=}\" \"\${@:2}\"; continue ;;"$'\n'}
         ${opts}
         ( * ) error 'Unknown option: \"%s\"' \"\${1}\" ;;
         esac
