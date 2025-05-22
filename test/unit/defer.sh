@@ -37,7 +37,7 @@ export -f setup
       echo "${FUNCNAME[0]}: Init"
       echo "${FUNCNAME[0]}: Main loop"
       false
-      echo "This should never be displayed"
+      echo 'This should never be displayed'
     }
 
     a
@@ -89,7 +89,7 @@ export -f setup
       echo "${FUNCNAME[0]}: Init"
       echo "${FUNCNAME[0]}: Main loop"
       false
-      echo "This should never be displayed"
+      echo 'This should never be displayed'
     }
 
     a
@@ -117,7 +117,7 @@ export -f setup
       echo "${FUNCNAME[0]}: Init"
       echo "${FUNCNAME[0]}: Main loop"
       return 1
-      echo "This should never be displayed"
+      echo 'This should never be displayed'
     }
 
     a
@@ -172,7 +172,7 @@ export -f setup
       echo "${FUNCNAME[0]}: Init"
       echo "${FUNCNAME[0]}: Main loop"
       return 1
-      echo "This should never be displayed"
+      echo 'This should never be displayed'
     }
 
     if not a; then :; fi
@@ -273,7 +273,7 @@ export -f setup
   str eq "${lines[9]}" 'a:   Releasing resources'
 }
 
-@test "[false] nested functions 1" {
+@test "[false] nested functions" {
   run_me () {
     setup
 
@@ -281,7 +281,7 @@ export -f setup
       defer "echo '${FUNCNAME[0]}: Cleanup:'"
       defer "echo '${FUNCNAME[0]}:   Freeing memory'"
       false
-      echo "This should never be displayed"
+      echo 'This should never be displayed'
     }
 
     a () {
@@ -304,13 +304,15 @@ export -f setup
   str eq "${lines[3]}" 'a:   Releasing resources'
 }
 
-@test "[false] nested functions 2" {
+@test "[return 1] nested functions" {
   run_me () {
     setup
 
     b () {
       defer "echo '${FUNCNAME[0]}: Cleanup:'"
       defer "echo '${FUNCNAME[0]}:   Freeing memory'"
+      return 1
+      echo 'This should never be displayed'
     }
 
     a () {
@@ -318,61 +320,28 @@ export -f setup
       defer "echo '${FUNCNAME[0]}:   Releasing resources'"
 
       b
+    }
 
+    a
+  }
+  export -f run_me
+
+  run bash -c 'run_me'
+  not eq "${status}" '0'
+  eq "${#lines[@]}" '4'
+  str eq "${lines[0]}" 'b: Cleanup:'
+  str eq "${lines[1]}" 'b:   Freeing memory'
+  str eq "${lines[2]}" 'a: Cleanup:'
+  str eq "${lines[3]}" 'a:   Releasing resources'
+}
+
+@test "[handled false] nested functions" {
+  run_me () {
+    setup
+
+    b () {
+      defer "echo '${FUNCNAME[0]}: Cleanup:'"
       false
-      echo "This should never be displayed"
-    }
-
-    a
-  }
-  export -f run_me
-
-  run bash -c 'run_me'
-  not eq "${status}" '0'
-  eq "${#lines[@]}" '4'
-  str eq "${lines[0]}" 'b: Cleanup:'
-  str eq "${lines[1]}" 'b:   Freeing memory'
-  str eq "${lines[2]}" 'a: Cleanup:'
-  str eq "${lines[3]}" 'a:   Releasing resources'
-}
-
-@test "[return 1] nested functions 1" {
-  run_me () {
-    setup
-
-    b () {
-      defer "echo '${FUNCNAME[0]}: Cleanup:'"
-      defer "echo '${FUNCNAME[0]}:   Freeing memory'"
-      return 1
-      echo "This should never be displayed"
-    }
-
-    a () {
-      defer "echo '${FUNCNAME[0]}: Cleanup:'"
-      defer "echo '${FUNCNAME[0]}:   Releasing resources'"
-
-      b
-    }
-
-    a
-  }
-  export -f run_me
-
-  run bash -c 'run_me'
-  not eq "${status}" '0'
-  eq "${#lines[@]}" '4'
-  str eq "${lines[0]}" 'b: Cleanup:'
-  str eq "${lines[1]}" 'b:   Freeing memory'
-  str eq "${lines[2]}" 'a: Cleanup:'
-  str eq "${lines[3]}" 'a:   Releasing resources'
-}
-
-@test "[return 1] nested functions 2" {
-  run_me () {
-    setup
-
-    b () {
-      defer "echo '${FUNCNAME[0]}: Cleanup:'"
       defer "echo '${FUNCNAME[0]}:   Freeing memory'"
     }
 
@@ -381,17 +350,46 @@ export -f setup
       defer "echo '${FUNCNAME[0]}:   Releasing resources'"
 
       b
-
-      return 1
-      echo "This should never be displayed"
     }
 
-    a
+    if not a; then :; fi
   }
   export -f run_me
 
   run bash -c 'run_me'
-  not eq "${status}" '0'
+  eq "${status}" '0'
+  eq "${#lines[@]}" '4'
+  str eq "${lines[0]}" 'b: Cleanup:'
+  str eq "${lines[1]}" 'b:   Freeing memory'
+  str eq "${lines[2]}" 'a: Cleanup:'
+  str eq "${lines[3]}" 'a:   Releasing resources'
+}
+
+@test "[handled return 1] nested functions" {
+  run_me () {
+    setup
+
+    b () {
+      defer "echo '${FUNCNAME[0]}: Cleanup:'"
+      defer "echo '${FUNCNAME[0]}:   Freeing memory'"
+      return 1
+      echo 'This should never be displayed'
+    }
+
+    a () {
+      defer "echo '${FUNCNAME[0]}: Cleanup:'"
+      defer "echo '${FUNCNAME[0]}:   Releasing resources'"
+
+      if not b; then return 1; fi
+      echo 'This should never be displayed too'
+    }
+
+    if not a; then :; fi
+  }
+  export -f run_me
+
+  run bash -c 'run_me'
+  eq "${status}" '0'
   eq "${#lines[@]}" '4'
   str eq "${lines[0]}" 'b: Cleanup:'
   str eq "${lines[1]}" 'b:   Freeing memory'
@@ -419,6 +417,68 @@ export -f setup
 
   run bash -c 'run_me'
   eq "${status}" '0'
+  eq "${#lines[@]}" '6'
+  str eq "${lines[0]}" 'a 3: Cleanup:'
+  str eq "${lines[1]}" 'a 3:   Removing temporary file'
+  str eq "${lines[2]}" 'a 2: Cleanup:'
+  str eq "${lines[3]}" 'a 2:   Removing temporary file'
+  str eq "${lines[4]}" 'a 1: Cleanup:'
+  str eq "${lines[5]}" 'a 1:   Removing temporary file'
+}
+
+@test "[false] recursive function" {
+  run_me () {
+    setup
+
+    a () {
+      defer "echo '${FUNCNAME[0]} ${1}: Cleanup:'"
+      defer "echo '${FUNCNAME[0]} ${1}:   Removing temporary file'"
+
+      if lt "${1}" '3'
+      then
+        a "$(( ${1} + 1 ))"
+      else
+        false
+      fi
+    }
+
+    a 1
+  }
+  export -f run_me
+
+  run bash -c 'run_me'
+  not eq "${status}" '0'
+  eq "${#lines[@]}" '6'
+  str eq "${lines[0]}" 'a 3: Cleanup:'
+  str eq "${lines[1]}" 'a 3:   Removing temporary file'
+  str eq "${lines[2]}" 'a 2: Cleanup:'
+  str eq "${lines[3]}" 'a 2:   Removing temporary file'
+  str eq "${lines[4]}" 'a 1: Cleanup:'
+  str eq "${lines[5]}" 'a 1:   Removing temporary file'
+}
+
+@test "[return 1] recursive function" {
+  run_me () {
+    setup
+
+    a () {
+      defer "echo '${FUNCNAME[0]} ${1}: Cleanup:'"
+      defer "echo '${FUNCNAME[0]} ${1}:   Removing temporary file'"
+
+      if lt "${1}" '3'
+      then
+        a "$(( ${1} + 1 ))"
+      else
+        return 1
+      fi
+    }
+
+    a 1
+  }
+  export -f run_me
+
+  run bash -c 'run_me'
+  not eq "${status}" '0'
   eq "${#lines[@]}" '6'
   str eq "${lines[0]}" 'a 3: Cleanup:'
   str eq "${lines[1]}" 'a 3:   Removing temporary file'

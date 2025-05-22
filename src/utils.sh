@@ -122,7 +122,7 @@ capture () {
 
 defer () {
   local opt
-  for opt in functrace errtrace
+  for opt in errexit errtrace functrace
   do
     if is not set "${opt}"
     then
@@ -130,7 +130,7 @@ defer () {
     fi
   done
 
-  local stage pfx ppfx c old_ifs prev_return_trap prev_err_trap prev_err_trap_cmd caller_id min max x fn_restore_return fn_restore_err
+  local stage pfx ppfx c old_ifs prev_return_trap prev_err_trap caller_id min max x fn_restore_return fn_restore_err
   local -a caller
   old_ifs="${IFS}"
   stage='0'
@@ -160,15 +160,13 @@ defer () {
   then
     prev_err_trap="$(trap -p ERR)"
     prev_err_trap="${prev_err_trap#"trap -- '' ERR"}"
-    prev_err_trap_cmd="${prev_err_trap%"' ERR"}"
-    prev_err_trap_cmd="${pfx}0; ${prev_err_trap_cmd#"trap -- '"}"
-    fn_restore_return="${c}${c}restore${c}return${c}trap${c}${caller_id}${c}"
-    fn_restore_err="${c}${c}restore${c}err${c}trap${c}${caller_id}${c}"
-    readonly prev_err_trap prev_err_trap_cmd fn_restore_return fn_restore_err
+    fn_restore_return="${c}${c}restore${c}return${c}trap${c}${caller_id}"
+    fn_restore_err="${c}${c}restore${c}err${c}trap${c}${caller_id}"
+    readonly fn_restore_return fn_restore_err
     trap -- "
       if eq \"\${?}\" '0'
       then
-        if str eq \"\${FUNCNAME[0]}\" \"${FUNCNAME[1]}\"
+        if str eq \"\${FUNCNAME[*]}\" \"${FUNCNAME[*]:1}\"
         then
           ${fn_restore_return} () {
             ${prev_return_trap:-trap - RETURN}
@@ -182,12 +180,17 @@ defer () {
           ${fn_restore_return}
           ${fn_restore_err}
         fi
-      elif str eq \"\${FUNCNAME[0]}\" \"${FUNCNAME[1]}\"
+      elif str eq \"\${FUNCNAME[*]}\" \"${FUNCNAME[*]:1}\"
       then
-        ${prev_err_trap_cmd}
+        false
       fi
     " RETURN
-    trap -- "${prev_err_trap_cmd}" ERR
+    prev_err_trap="${prev_err_trap%"' ERR"}"
+    prev_err_trap="${prev_err_trap#"trap -- '"}"
+    trap -- "
+      ${pfx}0
+      ${prev_err_trap}
+    " ERR
   fi
   while is func "${pfx}$(( ++stage ))"; do :; done
   (( stage-- ))
@@ -379,6 +382,7 @@ gengetopt () {
   IFS="${reset_ifs}"
   source /proc/self/fd/0 <<< "
     getopt () {
+      unset -v getopt
       global -A getopt
       until eq \"\${#}\" '0'
       do
@@ -394,6 +398,7 @@ gengetopt () {
         esac
         shift
       done
+      unset -f \"\${FUNCNAME[0]}\"
     }
   "
 }
