@@ -130,7 +130,7 @@ defer () {
     fi
   done
 
-  local stage pfx ppfx c old_ifs prev_return_trap prev_err_trap min max x
+  local stage pfx ppfx c old_ifs prev_return_trap prev_err_trap prev_err_trap_cmd caller_id min max x fn_restore_return fn_restore_err
   local -a caller
   old_ifs="${IFS}"
   stage='0'
@@ -151,28 +151,43 @@ defer () {
   done
   ppfx="${c}${c}deferred${c}"
   IFS="${c}"
-  pfx="${ppfx}${caller[*]}${c}"
+  caller_id="${caller[*]}"
   IFS="${old_ifs}"
-  readonly pfx ppfx caller
+  pfx="${ppfx}${caller_id}${c}"
+  readonly pfx ppfx caller caller_id
 
   if is not func "${pfx}0"
   then
     prev_err_trap="$(trap -p ERR)"
     prev_err_trap="${prev_err_trap#"trap -- '' ERR"}"
-    readonly prev_err_trap
+    prev_err_trap_cmd="${prev_err_trap%"' ERR"}"
+    prev_err_trap_cmd="${pfx}0; ${prev_err_trap_cmd#"trap -- '"}"
+    fn_restore_return="${c}${c}restore${c}return${c}trap${c}${caller_id}${c}"
+    fn_restore_err="${c}${c}restore${c}err${c}trap${c}${caller_id}${c}"
+    readonly prev_err_trap prev_err_trap_cmd fn_restore_return fn_restore_err
     trap -- "
-      if str eq \"\${FUNCNAME[0]}\" \"${FUNCNAME[1]}\"
+      if eq \"\${?}\" '0'
       then
-        ${pfx}0
-        ${prev_return_trap:-trap - RETURN}
-        ${prev_err_trap:-trap - ERR}
+        if str eq \"\${FUNCNAME[0]}\" \"${FUNCNAME[1]}\"
+        then
+          ${fn_restore_return} () {
+            ${prev_return_trap:-trap - RETURN}
+            unset -f \"\${FUNCNAME[0]}\"
+          }
+          ${fn_restore_err} () {
+            ${prev_err_trap:-trap - ERR}
+            unset -f \"\${FUNCNAME[0]}\"
+          }
+          ${pfx}0
+          ${fn_restore_return}
+          ${fn_restore_err}
+        fi
+      elif str eq \"\${FUNCNAME[0]}\" \"${FUNCNAME[1]}\"
+      then
+        ${prev_err_trap_cmd}
       fi
-      " RETURN
-    trap -- "
-      ${pfx}0;
-      ${prev_return_trap:-trap - RETURN}
-      ${prev_err_trap:-trap - ERR}
-    " ERR
+    " RETURN
+    trap -- "${prev_err_trap_cmd}" ERR
   fi
   while is func "${pfx}$(( ++stage ))"; do :; done
   (( stage-- ))

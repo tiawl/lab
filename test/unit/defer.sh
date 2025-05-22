@@ -28,7 +28,7 @@ export -f setup
   str eq "${lines[2]}" 'a: Cleanup'
 }
 
-@test "[error] simple defer" {
+@test "[false] simple defer" {
   run_me () {
     setup
 
@@ -37,6 +37,7 @@ export -f setup
       echo "${FUNCNAME[0]}: Init"
       echo "${FUNCNAME[0]}: Main loop"
       false
+      echo "This should never be displayed"
     }
 
     a
@@ -77,7 +78,63 @@ export -f setup
   str eq "${lines[4]}" 'a:   Freeing memory'
 }
 
-@test "[error] multiple defers" {
+@test "[false] multiple defers" {
+  run_me () {
+    setup
+
+    a () {
+      defer "echo '${FUNCNAME[0]}: Cleanup:'"
+      defer "echo '${FUNCNAME[0]}:   Removing temporary file'"
+      defer "echo '${FUNCNAME[0]}:   Freeing memory'"
+      echo "${FUNCNAME[0]}: Init"
+      echo "${FUNCNAME[0]}: Main loop"
+      false
+      echo "This should never be displayed"
+    }
+
+    a
+  }
+  export -f run_me
+
+  run bash -c 'run_me'
+  not eq "${status}" '0'
+  eq "${#lines[@]}" '5'
+  str eq "${lines[0]}" 'a: Init'
+  str eq "${lines[1]}" 'a: Main loop'
+  str eq "${lines[2]}" 'a: Cleanup:'
+  str eq "${lines[3]}" 'a:   Removing temporary file'
+  str eq "${lines[4]}" 'a:   Freeing memory'
+}
+
+@test "[return 1] multiple defers" {
+  run_me () {
+    setup
+
+    a () {
+      defer "echo '${FUNCNAME[0]}: Cleanup:'"
+      defer "echo '${FUNCNAME[0]}:   Removing temporary file'"
+      defer "echo '${FUNCNAME[0]}:   Freeing memory'"
+      echo "${FUNCNAME[0]}: Init"
+      echo "${FUNCNAME[0]}: Main loop"
+      return 1
+      echo "This should never be displayed"
+    }
+
+    a
+  }
+  export -f run_me
+
+  run bash -c 'run_me'
+  not eq "${status}" '0'
+  eq "${#lines[@]}" '5'
+  str eq "${lines[0]}" 'a: Init'
+  str eq "${lines[1]}" 'a: Main loop'
+  str eq "${lines[2]}" 'a: Cleanup:'
+  str eq "${lines[3]}" 'a:   Removing temporary file'
+  str eq "${lines[4]}" 'a:   Freeing memory'
+}
+
+@test "[handled false] multiple defers" {
   run_me () {
     setup
 
@@ -90,17 +147,46 @@ export -f setup
       echo "${FUNCNAME[0]}: Main loop"
     }
 
-    a
+    if not a; then :; fi
   }
   export -f run_me
 
   run bash -c 'run_me'
-  not eq "${status}" '0'
-  eq "${#lines[@]}" '4'
+  eq "${status}" '0'
+  eq "${#lines[@]}" '5'
   str eq "${lines[0]}" 'a: Init'
-  str eq "${lines[1]}" 'a: Cleanup:'
-  str eq "${lines[2]}" 'a:   Removing temporary file'
-  str eq "${lines[3]}" 'a:   Freeing memory'
+  str eq "${lines[1]}" 'a: Main loop'
+  str eq "${lines[2]}" 'a: Cleanup:'
+  str eq "${lines[3]}" 'a:   Removing temporary file'
+  str eq "${lines[4]}" 'a:   Freeing memory'
+}
+
+@test "[handled return 1] multiple defers" {
+  run_me () {
+    setup
+
+    a () {
+      defer "echo '${FUNCNAME[0]}: Cleanup:'"
+      defer "echo '${FUNCNAME[0]}:   Removing temporary file'"
+      defer "echo '${FUNCNAME[0]}:   Freeing memory'"
+      echo "${FUNCNAME[0]}: Init"
+      echo "${FUNCNAME[0]}: Main loop"
+      return 1
+      echo "This should never be displayed"
+    }
+
+    if not a; then :; fi
+  }
+  export -f run_me
+
+  run bash -c 'run_me'
+  eq "${status}" '0'
+  eq "${#lines[@]}" '5'
+  str eq "${lines[0]}" 'a: Init'
+  str eq "${lines[1]}" 'a: Main loop'
+  str eq "${lines[2]}" 'a: Cleanup:'
+  str eq "${lines[3]}" 'a:   Removing temporary file'
+  str eq "${lines[4]}" 'a:   Freeing memory'
 }
 
 @test "nested functions 1" {
@@ -185,6 +271,132 @@ export -f setup
   str eq "${lines[7]}" 'c:   Remove cache'
   str eq "${lines[8]}" 'a: Cleanup:'
   str eq "${lines[9]}" 'a:   Releasing resources'
+}
+
+@test "[false] nested functions 1" {
+  run_me () {
+    setup
+
+    b () {
+      defer "echo '${FUNCNAME[0]}: Cleanup:'"
+      defer "echo '${FUNCNAME[0]}:   Freeing memory'"
+      false
+      echo "This should never be displayed"
+    }
+
+    a () {
+      defer "echo '${FUNCNAME[0]}: Cleanup:'"
+      defer "echo '${FUNCNAME[0]}:   Releasing resources'"
+
+      b
+    }
+
+    a
+  }
+  export -f run_me
+
+  run bash -c 'run_me'
+  not eq "${status}" '0'
+  eq "${#lines[@]}" '4'
+  str eq "${lines[0]}" 'b: Cleanup:'
+  str eq "${lines[1]}" 'b:   Freeing memory'
+  str eq "${lines[2]}" 'a: Cleanup:'
+  str eq "${lines[3]}" 'a:   Releasing resources'
+}
+
+@test "[false] nested functions 2" {
+  run_me () {
+    setup
+
+    b () {
+      defer "echo '${FUNCNAME[0]}: Cleanup:'"
+      defer "echo '${FUNCNAME[0]}:   Freeing memory'"
+    }
+
+    a () {
+      defer "echo '${FUNCNAME[0]}: Cleanup:'"
+      defer "echo '${FUNCNAME[0]}:   Releasing resources'"
+
+      b
+
+      false
+      echo "This should never be displayed"
+    }
+
+    a
+  }
+  export -f run_me
+
+  run bash -c 'run_me'
+  not eq "${status}" '0'
+  eq "${#lines[@]}" '4'
+  str eq "${lines[0]}" 'b: Cleanup:'
+  str eq "${lines[1]}" 'b:   Freeing memory'
+  str eq "${lines[2]}" 'a: Cleanup:'
+  str eq "${lines[3]}" 'a:   Releasing resources'
+}
+
+@test "[return 1] nested functions 1" {
+  run_me () {
+    setup
+
+    b () {
+      defer "echo '${FUNCNAME[0]}: Cleanup:'"
+      defer "echo '${FUNCNAME[0]}:   Freeing memory'"
+      return 1
+      echo "This should never be displayed"
+    }
+
+    a () {
+      defer "echo '${FUNCNAME[0]}: Cleanup:'"
+      defer "echo '${FUNCNAME[0]}:   Releasing resources'"
+
+      b
+    }
+
+    a
+  }
+  export -f run_me
+
+  run bash -c 'run_me'
+  not eq "${status}" '0'
+  eq "${#lines[@]}" '4'
+  str eq "${lines[0]}" 'b: Cleanup:'
+  str eq "${lines[1]}" 'b:   Freeing memory'
+  str eq "${lines[2]}" 'a: Cleanup:'
+  str eq "${lines[3]}" 'a:   Releasing resources'
+}
+
+@test "[return 1] nested functions 2" {
+  run_me () {
+    setup
+
+    b () {
+      defer "echo '${FUNCNAME[0]}: Cleanup:'"
+      defer "echo '${FUNCNAME[0]}:   Freeing memory'"
+    }
+
+    a () {
+      defer "echo '${FUNCNAME[0]}: Cleanup:'"
+      defer "echo '${FUNCNAME[0]}:   Releasing resources'"
+
+      b
+
+      return 1
+      echo "This should never be displayed"
+    }
+
+    a
+  }
+  export -f run_me
+
+  run bash -c 'run_me'
+  not eq "${status}" '0'
+  eq "${#lines[@]}" '4'
+  str eq "${lines[0]}" 'b: Cleanup:'
+  str eq "${lines[1]}" 'b:   Freeing memory'
+  str eq "${lines[2]}" 'a: Cleanup:'
+  str eq "${lines[3]}" 'a:   Releasing resources'
 }
 
 @test "recursive function" {
