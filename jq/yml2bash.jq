@@ -12,7 +12,6 @@
 #             while [[ expression ]]; do list-2; done
 #   - for:    for (( <expr1> ; <expr2> ; <expr3> )) ; do <list> ; done
 # - async/wait
-# - inventory
 
 {
   user: "__",
@@ -875,6 +874,7 @@ def internals(level): (
         group: {
           commands: [
             {on: [[{literal: "errexit"}], [{literal: "inherit_errexit"}], [{literal: "errtrace"}], [{literal: "functrace"}], [{literal: "noclobber"}], [{literal: "nounset"}], [{literal: "pipefail"}], [{literal: "lastpipe"}], [{literal: "extglob"}]]},
+            #{on: [[{literal: "xtrace"}], [{literal: "errexit"}], [{literal: "inherit_errexit"}], [{literal: "errtrace"}], [{literal: "functrace"}], [{literal: "noclobber"}], [{literal: "nounset"}], [{literal: "pipefail"}], [{literal: "lastpipe"}], [{literal: "extglob"}]]},
             {raw: {command: "bash_setup", args: []}},
             {raw: {command: "load_resources", args: []}},
             {raw: {command: "init", args: []}},
@@ -1017,4 +1017,33 @@ def write_runner_script: (
   $NAMESPACE.internal + "main \"${@}\""
 );
 
+def process_inventory: (
+  .inventory as $inventory |
+
+  def process_inventory_into_inventory(walk_path): (
+    if (type == "object") then (
+      if (has("inventory")) then (
+        if (.inventory | type != "string") then (
+          "process_inventory_into_inventory: \"inventory\" must be string typed" | exit
+        ) else . end |
+        .inventory as $inv |
+        if (walk_path | any(. == $inv)) then (
+          "process_inventory_into_inventory: Inventory cycle detected" | exit
+        ) else . end |
+        $inventory[.inventory] | process_inventory_into_inventory(walk_path + [.inventory])
+      ) else (
+        map_values(process_inventory_into_inventory(walk_path))
+      ) end
+    ) elif type == "array" then (
+      map(process_inventory_into_inventory(walk_path))
+    ) else . end
+  );
+
+  (.inventory | map_values(process_inventory_into_inventory([]))) as $inventory |
+  {
+    group: (.group | walk(if type == "object" and has("inventory") then ($inventory[.inventory]) else . end))
+  }
+);
+
+process_inventory |
 write_runner_script

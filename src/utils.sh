@@ -69,8 +69,8 @@ str () {
   esac
 }
 
-readl () {
-  IFS= read -r "${@}" || eq "${?}" 1
+read_http_code () {
+  IFS= read -r http_code || eq "${?}" 1
 }
 
 error () {
@@ -169,9 +169,7 @@ defer () {
     prev_err_trap="$(trap -p ERR)"
     prev_err_trap="${prev_err_trap#"trap -- '' ERR"}"
     prev_err_trap_arg="${prev_err_trap%"' ERR"}"
-    prev_err_trap_arg="${prev_err_trap_arg%"${prev_err_trap_arg##*[![:space:]]}"}"
     prev_err_trap_arg="${prev_err_trap_arg#"trap -- '"}"
-    prev_err_trap_arg="${prev_err_trap_arg#"${prev_err_trap_arg%%[![:space:]]*}"}"
     fn_prev_return_trap_def="${fn_prev_return_trap} () {
       ${prev_return_trap:-trap - RETURN}
     }"
@@ -191,7 +189,10 @@ defer () {
         fi
       elif str eq \"\${FUNCNAME[*]}\" \"${FUNCNAME[*]:1}\"
       then
-        false
+        ${pfx}0 RETURN
+        unset -f ${fn_prev_return_trap} ${fn_prev_err_trap}
+        ${prev_err_trap_arg//ERR/RETURN}
+        trap - ERR
       fi
     " RETURN
     trap -- "
@@ -219,7 +220,7 @@ defer () {
         restore_err_trap=\"\$(trap -p ERR)\"
         ${fn_prev_err_trap}
       fi
-      if not ${*}
+      if ! { ${*}; }
       then
         false
       fi

@@ -1,3 +1,34 @@
+inventory:
+  bounce_buildargs:
+  - key:
+    - literal: FROM
+    value:
+    - key:
+      - literal: image
+      var: loc
+    - literal: alpine
+    - key:
+      - literal: tag
+      special: sep
+    - key:
+      - literal: alpine
+      var: version
+  - key:
+    - literal: KEY_NAME
+    value:
+    - var: key_name
+  - key:
+    - literal: USER
+    value:
+    - special: USER
+  - key:
+    - literal: SSH_HOME
+    value:
+    - var: ssh_home
+  - key:
+    - literal: UID
+    value:
+    - special: UID
 group:
   commands:
   - harden:
@@ -157,35 +188,7 @@ group:
                 context:
                 - literal: ./dockerfiles/bounce
                 buildargs:
-                - key:
-                  - literal: FROM
-                  value:
-                  - key:
-                    - literal: image
-                    var: loc
-                  - literal: alpine
-                  - key:
-                    - literal: tag
-                    special: sep
-                  - key:
-                    - literal: alpine
-                    var: version
-                - key:
-                  - literal: KEY_NAME
-                  value:
-                  - var: key_name
-                - key:
-                  - literal: USER
-                  value:
-                  - special: USER
-                - key:
-                  - literal: SSH_HOME
-                  value:
-                  - var: ssh_home
-                - key:
-                  - literal: UID
-                  value:
-                  - special: UID
+                  inventory: bounce_buildargs
   - if:
       not:
         group:
@@ -215,35 +218,7 @@ group:
         - image:
             build:
               args:
-              - key:
-                - literal: FROM
-                value:
-                - key:
-                  - literal: image
-                  var: loc
-                - literal: alpine
-                - key:
-                  - literal: tag
-                  special: sep
-                - key:
-                  - literal: alpine
-                  var: version
-              - key:
-                - literal: KEY_NAME
-                value:
-                - var: key_name
-              - key:
-                - literal: USER
-                value:
-                - special: USER
-              - key:
-                - literal: SSH_HOME
-                value:
-                - var: ssh_home
-              - key:
-                - literal: UID
-                value:
-                - special: UID
+                inventory: bounce_buildargs
               context:
               - literal: ./dockerfiles/bounce
               image:

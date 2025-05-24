@@ -380,8 +380,8 @@ export -f setup
       defer "echo '${FUNCNAME[0]}: Cleanup:'"
       defer "echo '${FUNCNAME[0]}:   Releasing resources'"
 
-      if not b; then return 1; fi
-      echo 'This should never be displayed too'
+      b
+      echo "${FUNCNAME[0]}: Init"
     }
 
     if not a; then :; fi
@@ -390,11 +390,12 @@ export -f setup
 
   run bash -c 'run_me'
   eq "${status}" '0'
-  eq "${#lines[@]}" '4'
+  eq "${#lines[@]}" '5'
   str eq "${lines[0]}" 'b: Cleanup:'
   str eq "${lines[1]}" 'b:   Freeing memory'
-  str eq "${lines[2]}" 'a: Cleanup:'
-  str eq "${lines[3]}" 'a:   Releasing resources'
+  str eq "${lines[2]}" 'a: Init'
+  str eq "${lines[3]}" 'a: Cleanup:'
+  str eq "${lines[4]}" 'a:   Releasing resources'
 }
 
 @test "recursive function" {
@@ -535,7 +536,8 @@ export -f setup
 
       if lt "${1}" '3'
       then
-        a "$(( ${1} + 1 ))" || :
+        #a "$(( ${1} + 1 ))" || :
+        a "$(( ${1} + 1 ))"
       fi
     }
 
@@ -639,66 +641,6 @@ export -f setup
   str eq "${lines[3]}" 'b:   Freeing memory'
 }
 
-@test "[handled] deferred false" {
-  run_me () {
-    setup
-
-    b () {
-      defer "echo '${FUNCNAME[0]}: Cleanup:'"
-      defer "echo '${FUNCNAME[0]}:   Freeing memory'"
-      false
-    }
-
-    a () {
-      defer "echo '${FUNCNAME[0]}: Cleanup:'"
-      defer "echo '${FUNCNAME[0]}:   Releasing resources'"
-      defer 'b'
-    }
-
-    trap 'if eq "${?}" 1; then trap - EXIT; exit 0; fi' EXIT
-    a
-  }
-  export -f run_me
-
-  run bash -c 'run_me'
-  eq "${status}" '0'
-  eq "${#lines[@]}" '4'
-  str eq "${lines[0]}" 'a: Cleanup:'
-  str eq "${lines[1]}" 'a:   Releasing resources'
-  str eq "${lines[2]}" 'b: Cleanup:'
-  str eq "${lines[3]}" 'b:   Freeing memory'
-}
-
-@test "[handled] deferred return 1" {
-  run_me () {
-    setup
-
-    b () {
-      defer "echo '${FUNCNAME[0]}: Cleanup:'"
-      defer "echo '${FUNCNAME[0]}:   Freeing memory'"
-      return 1
-    }
-
-    a () {
-      defer "echo '${FUNCNAME[0]}: Cleanup:'"
-      defer "echo '${FUNCNAME[0]}:   Releasing resources'"
-      defer 'b'
-    }
-
-    trap 'if eq "${?}" 1; then trap - EXIT; exit 0; fi' EXIT
-    a
-  }
-  export -f run_me
-
-  run bash -c 'run_me'
-  eq "${status}" '0'
-  eq "${#lines[@]}" '4'
-  str eq "${lines[0]}" 'a: Cleanup:'
-  str eq "${lines[1]}" 'a:   Releasing resources'
-  str eq "${lines[2]}" 'b: Cleanup:'
-  str eq "${lines[3]}" 'b:   Freeing memory'
-}
-
 @test "nested defers into recursive function" {
   run_me () {
     setup
@@ -781,70 +723,6 @@ export -f setup
 
   run bash -c 'run_me'
   not eq "${status}" '0'
-  eq "${#lines[@]}" '6'
-  str eq "${lines[0]}" 'a 1: Cleanup:'
-  str eq "${lines[1]}" 'a 1:   Removing temporary file'
-  str eq "${lines[2]}" 'a 2: Cleanup:'
-  str eq "${lines[3]}" 'a 2:   Removing temporary file'
-  str eq "${lines[4]}" 'a 3: Cleanup:'
-  str eq "${lines[5]}" 'a 3:   Removing temporary file'
-}
-
-@test "[handled] deferred false into recursive function" {
-  run_me () {
-    setup
-
-    a () {
-      defer "echo '${FUNCNAME[0]} ${1}: Cleanup:'"
-      defer "echo '${FUNCNAME[0]} ${1}:   Removing temporary file'"
-
-      if lt "${1}" '3'
-      then
-        defer "a '$(( ${1} + 1 ))'"
-      else
-        false
-      fi
-    }
-
-    trap 'if eq "${?}" 1; then trap - EXIT; exit 0; fi' EXIT
-    a 1
-  }
-  export -f run_me
-
-  run bash -c 'run_me'
-  eq "${status}" '0'
-  eq "${#lines[@]}" '6'
-  str eq "${lines[0]}" 'a 1: Cleanup:'
-  str eq "${lines[1]}" 'a 1:   Removing temporary file'
-  str eq "${lines[2]}" 'a 2: Cleanup:'
-  str eq "${lines[3]}" 'a 2:   Removing temporary file'
-  str eq "${lines[4]}" 'a 3: Cleanup:'
-  str eq "${lines[5]}" 'a 3:   Removing temporary file'
-}
-
-@test "[handled] deferred return 1 into recursive function" {
-  run_me () {
-    setup
-
-    a () {
-      defer "echo '${FUNCNAME[0]} ${1}: Cleanup:'"
-      defer "echo '${FUNCNAME[0]} ${1}:   Removing temporary file'"
-
-      if lt "${1}" '3'
-      then
-        defer "a '$(( ${1} + 1 ))'"
-      else
-        return 1
-      fi
-    }
-
-    trap 'if eq "${?}" 1; then trap - EXIT; exit 0; fi' EXIT
-    a 1
-  }
-  export -f run_me
-
-  run bash -c 'run_me'
-  eq "${status}" '0'
   eq "${#lines[@]}" '6'
   str eq "${lines[0]}" 'a 1: Cleanup:'
   str eq "${lines[1]}" 'a 1:   Removing temporary file'

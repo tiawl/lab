@@ -28,7 +28,7 @@ image_build () { #HELP <repository> <tag> <context> [<buildargs>]|Build an image
 
   local json_object http_code
   coproc HTTP_CODE { sed "${sed[colored_http_code]}"; }
-  defer 'exec {HTTP_CODE[1]}>&- 4>&-; readl http_code <&${HTTP_CODE[0]}; wait "${HTTP_CODE_PID}" 2> /dev/null || :; printf "%s\n" "${http_code}" >&2'
+  defer 'exec {HTTP_CODE[1]}>&- 4>&-; read_http_code <&${HTTP_CODE[0]}; wait "${HTTP_CODE_PID}" 2> /dev/null || :; printf "%s\n" "${http_code}" >&2'
 
   exec 4>&${HTTP_CODE[1]}
 
