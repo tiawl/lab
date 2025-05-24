@@ -1,4 +1,4 @@
-# !/usr/bin/env --split-string gojq --from-file
+#! /usr/bin/env --split-string gojq --from-file
 
 # TODO:
 # - more checks

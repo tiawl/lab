@@ -1,4 +1,4 @@
-# !/usr/bin/env --split-string sed --file
+#! /usr/bin/env --split-string sed --file
 
 # Add `]` before each `}`
 s/^\(\s*\)}$/\1]}/g

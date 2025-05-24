@@ -1,4 +1,4 @@
-# !/usr/bin/env --split-string sed --file
+#! /usr/bin/env --split-string sed --file
 
 /^\s*REPLY='[0-9]\+';\?$/ {
   s/';\?$//

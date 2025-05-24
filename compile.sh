@@ -19,7 +19,7 @@ compile () {
   harden sed
 
   local name version help
-  name='navy'
+  name='murloc'
   version="$(git -C "${SDIR}" describe --match *.*.* --tags --abbrev=9)"
   version="${version%-*}"
   version="${version%\.*}.${version#*-}"

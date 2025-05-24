@@ -108,7 +108,7 @@ off () {
 
 capture () {
   set -- "$(shopt -p)"
-  source /proc/self/fd/0 <<< "restore () {
+  eval "restore () {
     ${1//$'\n'/; }
     set -- \"${-}\"
     while gt \"\${#1}\" 0
@@ -118,6 +118,12 @@ capture () {
     done
     unset -f \"\${FUNCNAME[0]}\"
   }"
+}
+
+trim () {
+  local -n ref="${1}"
+  ref="${ref%"${ref##*[![:space:]]}"}"
+  ref="${ref#"${ref%%[![:space:]]*}"}"
 }
 
 defer () {
@@ -130,7 +136,7 @@ defer () {
     fi
   done
 
-  local stage pfx ppfx c old_ifs prev_return_trap prev_err_trap caller_id min max x fn_restore_return fn_restore_err
+  local stage pfx ppfx c old_ifs prev_return_trap prev_err_trap caller_id min max x fn_prev_return_trap fn_prev_err_trap fn_prev_return_trap_def fn_prev_err_trap_def prev_err_trap_arg
   local -a caller
   old_ifs="${IFS}"
   stage='0'
@@ -154,53 +160,73 @@ defer () {
   caller_id="${caller[*]}"
   IFS="${old_ifs}"
   pfx="${ppfx}${caller_id}${c}"
-  readonly pfx ppfx caller caller_id
+  fn_prev_return_trap="${c}${c}restore${c}previous${c}return${c}trap${c}${caller_id}"
+  fn_prev_err_trap="${c}${c}restore${c}previous${c}err${c}trap${c}${caller_id}"
+  readonly pfx ppfx caller caller_id fn_prev_return_trap fn_prev_err_trap
 
   if is not func "${pfx}0"
   then
     prev_err_trap="$(trap -p ERR)"
     prev_err_trap="${prev_err_trap#"trap -- '' ERR"}"
-    fn_restore_return="${c}${c}restore${c}return${c}trap${c}${caller_id}"
-    fn_restore_err="${c}${c}restore${c}err${c}trap${c}${caller_id}"
-    readonly fn_restore_return fn_restore_err
+    prev_err_trap_arg="${prev_err_trap%"' ERR"}"
+    prev_err_trap_arg="${prev_err_trap_arg%"${prev_err_trap_arg##*[![:space:]]}"}"
+    prev_err_trap_arg="${prev_err_trap_arg#"trap -- '"}"
+    prev_err_trap_arg="${prev_err_trap_arg#"${prev_err_trap_arg%%[![:space:]]*}"}"
+    fn_prev_return_trap_def="${fn_prev_return_trap} () {
+      ${prev_return_trap:-trap - RETURN}
+    }"
+    fn_prev_err_trap_def="${fn_prev_err_trap} () {
+      ${prev_err_trap:-trap - ERR}
+    }"
+    readonly prev_err_trap prev_err_trap_arg fn_prev_return_trap_def fn_prev_err_trap_def
     trap -- "
-      if eq \"\${?}\" '0'
+      if eq \"\${?}\" 0
       then
         if str eq \"\${FUNCNAME[*]}\" \"${FUNCNAME[*]:1}\"
         then
-          ${fn_restore_return} () {
-            ${prev_return_trap:-trap - RETURN}
-            unset -f \"\${FUNCNAME[0]}\"
-          }
-          ${fn_restore_err} () {
-            ${prev_err_trap:-trap - ERR}
-            unset -f \"\${FUNCNAME[0]}\"
-          }
-          ${pfx}0
-          ${fn_restore_return}
-          ${fn_restore_err}
+          ${pfx}0 RETURN
+          ${fn_prev_return_trap}
+          ${fn_prev_err_trap}
+          unset -f ${fn_prev_return_trap} ${fn_prev_err_trap}
         fi
       elif str eq \"\${FUNCNAME[*]}\" \"${FUNCNAME[*]:1}\"
       then
         false
       fi
     " RETURN
-    prev_err_trap="${prev_err_trap%"' ERR"}"
-    prev_err_trap="${prev_err_trap#"trap -- '"}"
     trap -- "
-      ${pfx}0
-      ${prev_err_trap}
+      ${pfx}0 ERR
+      unset -f ${fn_prev_return_trap} ${fn_prev_err_trap}
+      ${prev_err_trap_arg}
     " ERR
   fi
   while is func "${pfx}$(( ++stage ))"; do :; done
   (( stage-- ))
-  source /proc/self/fd/0 <<< "
+  eval "
     ${pfx}${stage} () {
-      local before after
+      $(
+        if is not func "${pfx}0"
+        then
+          printf '%s\n%s' "${fn_prev_return_trap_def}" "${fn_prev_err_trap_def}"
+        fi
+      )
+      local before after restore_err_trap
       on noglob
       before=(\$(compgen -A function -X '!${ppfx}*0'))
       off noglob
-      ${*}
+      if str eq \"\${1}\" RETURN
+      then
+        restore_err_trap=\"\$(trap -p ERR)\"
+        ${fn_prev_err_trap}
+      fi
+      if not ${*}
+      then
+        false
+      fi
+      if str eq \"\${1}\" RETURN
+      then
+        eval \"\${restore_err_trap}\"
+      fi
       on noglob
       after=(\$(compgen -A function -X '!${ppfx}*0'))
       off noglob
@@ -209,14 +235,14 @@ defer () {
         local deferred
         for deferred in \$(gojq -n -r '\$ARGS.positional | group_by(.) | .[] | select(length == 1) | .[0]' --args \"\${before[@]}\" \"\${after[@]}\")
         do
-          \${deferred}
+          \${deferred} \"\${1}\"
         done
       fi
-      ${pfx}$(( stage + 1 ))
-      unset \"\${FUNCNAME[0]}\"
+      ${pfx}$(( stage + 1 )) \"\${1}\"
+      unset -f \"\${FUNCNAME[0]}\"
     }
     ${pfx}$(( stage + 1 )) () {
-      unset \"\${FUNCNAME[0]}\"
+      unset -f \"\${FUNCNAME[0]}\"
     }
   "
 }
@@ -240,7 +266,7 @@ harden () {
     cmd="$(type -P "${1}")"
     if can exec "${cmd}"
     then
-      source /proc/self/fd/0 <<< "${alias} () { ${cmd} \"\${@}\"; }"
+      eval "${alias} () { ${cmd} \"\${@}\"; }"
     else
       error 'This script needs "%s" but can not find it' "${1}"
     fi
@@ -250,7 +276,7 @@ harden () {
 
   hardened="$(if is func hardened; then hardened; fi)"
   readonly hardened
-  source /proc/self/fd/0 <<< "hardened () {
+  eval "hardened () {
     printf \"%s\n\" ${hardened:+"'"}${hardened//$'\n'/"' '"}${hardened:+"'"} '${2:-"${1//-/_}"}'
   }"
 }
@@ -306,12 +332,13 @@ url () {
 }
 
 nchar () {
+  local -n ref="${1}"
   if not eq "${#2}" '1'
   then
     error 'Second argument must be a lonely char'
   fi
-  set -- "${1//[^"${2}"]}"
-  printf -v NCHAR '%d' "${#1}"
+  : "${ref//[^"${2}"]}"
+  printf -v "${!ref}" '%d' "${#_}"
 }
 
 gengetopt () {
@@ -322,8 +349,9 @@ gengetopt () {
   reset_ifs="${IFS}"
   until eq "${#}" '0'
   do
-    nchar "${1}" "${c}"
-    if not eq "${NCHAR}" '2'
+    local ncolon="${1}"
+    nchar ncolon "${c}"
+    if not eq "${ncolon}" '2'
     then
       error 'Each argument must match this pattern: "short-form%clong-form%cnb-args"' "${c}" "${c}"
     fi
@@ -380,7 +408,7 @@ gengetopt () {
   IFS='|'
   long_1arg_pattern="${long_1arg[*]}"
   IFS="${reset_ifs}"
-  source /proc/self/fd/0 <<< "
+  eval "
     getopt () {
       unset -v getopt
       global -A getopt

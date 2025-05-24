@@ -1,4 +1,4 @@
-# !/usr/bin/env --split-string sed --file
+#! /usr/bin/env --split-string sed --file
 
 s/^HTTPS\? 2/\o033[38;5;2m\0/
 t end

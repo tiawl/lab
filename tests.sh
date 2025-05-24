@@ -34,7 +34,7 @@ tests () {
   fi
 
   shopt -s globstar
-  #bats --filter '\[error\] nested functions' "${opts[@]}" "${sdir}"/test/**/*.sh
+  #bats --filter '\[return 1\] nested defers' "${opts[@]}" "${sdir}"/test/**/*.sh
   bats "${opts[@]}" "${sdir}"/test/**/*.sh
 }
 

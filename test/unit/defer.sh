@@ -1,4 +1,4 @@
-#!/usr/bin/env bats
+#! /usr/bin/env bats
 
 setup () {
   source src/utils.sh
@@ -402,8 +402,8 @@ export -f setup
     setup
 
     a () {
-      defer "echo '${FUNCNAME[0]} ${1}: Cleanup:'"
-      defer "echo '${FUNCNAME[0]} ${1}:   Removing temporary file'"
+      defer "echo '${FUNCNAME[*]:0:${1}}: Cleanup:'"
+      defer "echo '${FUNCNAME[*]:0:${1}}:   Removing temporary file'"
 
       if lt "${1}" '3'
       then
@@ -418,12 +418,12 @@ export -f setup
   run bash -c 'run_me'
   eq "${status}" '0'
   eq "${#lines[@]}" '6'
-  str eq "${lines[0]}" 'a 3: Cleanup:'
-  str eq "${lines[1]}" 'a 3:   Removing temporary file'
-  str eq "${lines[2]}" 'a 2: Cleanup:'
-  str eq "${lines[3]}" 'a 2:   Removing temporary file'
-  str eq "${lines[4]}" 'a 1: Cleanup:'
-  str eq "${lines[5]}" 'a 1:   Removing temporary file'
+  str eq "${lines[0]}" 'a a a: Cleanup:'
+  str eq "${lines[1]}" 'a a a:   Removing temporary file'
+  str eq "${lines[2]}" 'a a: Cleanup:'
+  str eq "${lines[3]}" 'a a:   Removing temporary file'
+  str eq "${lines[4]}" 'a: Cleanup:'
+  str eq "${lines[5]}" 'a:   Removing temporary file'
 }
 
 @test "[false] recursive function" {
@@ -431,8 +431,8 @@ export -f setup
     setup
 
     a () {
-      defer "echo '${FUNCNAME[0]} ${1}: Cleanup:'"
-      defer "echo '${FUNCNAME[0]} ${1}:   Removing temporary file'"
+      defer "echo '${FUNCNAME[*]:0:${1}}: Cleanup:'"
+      defer "echo '${FUNCNAME[*]:0:${1}}:   Removing temporary file'"
 
       if lt "${1}" '3'
       then
@@ -449,12 +449,12 @@ export -f setup
   run bash -c 'run_me'
   not eq "${status}" '0'
   eq "${#lines[@]}" '6'
-  str eq "${lines[0]}" 'a 3: Cleanup:'
-  str eq "${lines[1]}" 'a 3:   Removing temporary file'
-  str eq "${lines[2]}" 'a 2: Cleanup:'
-  str eq "${lines[3]}" 'a 2:   Removing temporary file'
-  str eq "${lines[4]}" 'a 1: Cleanup:'
-  str eq "${lines[5]}" 'a 1:   Removing temporary file'
+  str eq "${lines[0]}" 'a a a: Cleanup:'
+  str eq "${lines[1]}" 'a a a:   Removing temporary file'
+  str eq "${lines[2]}" 'a a: Cleanup:'
+  str eq "${lines[3]}" 'a a:   Removing temporary file'
+  str eq "${lines[4]}" 'a: Cleanup:'
+  str eq "${lines[5]}" 'a:   Removing temporary file'
 }
 
 @test "[return 1] recursive function" {
@@ -462,8 +462,8 @@ export -f setup
     setup
 
     a () {
-      defer "echo '${FUNCNAME[0]} ${1}: Cleanup:'"
-      defer "echo '${FUNCNAME[0]} ${1}:   Removing temporary file'"
+      defer "echo '${FUNCNAME[*]:0:${1}}: Cleanup:'"
+      defer "echo '${FUNCNAME[*]:0:${1}}:   Removing temporary file'"
 
       if lt "${1}" '3'
       then
@@ -480,12 +480,77 @@ export -f setup
   run bash -c 'run_me'
   not eq "${status}" '0'
   eq "${#lines[@]}" '6'
-  str eq "${lines[0]}" 'a 3: Cleanup:'
-  str eq "${lines[1]}" 'a 3:   Removing temporary file'
-  str eq "${lines[2]}" 'a 2: Cleanup:'
-  str eq "${lines[3]}" 'a 2:   Removing temporary file'
-  str eq "${lines[4]}" 'a 1: Cleanup:'
-  str eq "${lines[5]}" 'a 1:   Removing temporary file'
+  str eq "${lines[0]}" 'a a a: Cleanup:'
+  str eq "${lines[1]}" 'a a a:   Removing temporary file'
+  str eq "${lines[2]}" 'a a: Cleanup:'
+  str eq "${lines[3]}" 'a a:   Removing temporary file'
+  str eq "${lines[4]}" 'a: Cleanup:'
+  str eq "${lines[5]}" 'a:   Removing temporary file'
+}
+
+@test "[handled false] recursive function" {
+  run_me () {
+    setup
+
+    a () {
+      defer "echo '${FUNCNAME[*]:0:${1}}: Cleanup:'"
+      if eq "${1}" '3'
+      then
+        false
+      fi
+      defer "echo '${FUNCNAME[*]:0:${1}}:   Removing temporary file'"
+
+      if lt "${1}" '3'
+      then
+        a "$(( ${1} + 1 ))"
+      fi
+    }
+
+    if not a 1; then :; fi
+  }
+  export -f run_me
+
+  run bash -c 'run_me'
+  eq "${status}" '0'
+  eq "${#lines[@]}" '6'
+  str eq "${lines[0]}" 'a a a: Cleanup:'
+  str eq "${lines[1]}" 'a a a:   Removing temporary file'
+  str eq "${lines[2]}" 'a a: Cleanup:'
+  str eq "${lines[3]}" 'a a:   Removing temporary file'
+  str eq "${lines[4]}" 'a: Cleanup:'
+  str eq "${lines[5]}" 'a:   Removing temporary file'
+}
+
+@test "[handled return 1] recursive function" {
+  run_me () {
+    setup
+
+    a () {
+      defer "echo '${FUNCNAME[*]:0:${1}}: Cleanup:'"
+      if eq "${1}" '3'
+      then
+        return 1
+      fi
+      defer "echo '${FUNCNAME[*]:0:${1}}:   Removing temporary file'"
+
+      if lt "${1}" '3'
+      then
+        a "$(( ${1} + 1 ))" || :
+      fi
+    }
+
+    if not a 1; then :; fi
+  }
+  export -f run_me
+
+  run bash -c 'run_me'
+  eq "${status}" '0'
+  eq "${#lines[@]}" '5'
+  str eq "${lines[0]}" 'a a a: Cleanup:'
+  str eq "${lines[1]}" 'a a: Cleanup:'
+  str eq "${lines[2]}" 'a a:   Removing temporary file'
+  str eq "${lines[3]}" 'a: Cleanup:'
+  str eq "${lines[4]}" 'a:   Removing temporary file'
 }
 
 @test "nested defers" {
@@ -509,6 +574,64 @@ export -f setup
 
   run bash -c 'run_me'
   eq "${status}" '0'
+  eq "${#lines[@]}" '4'
+  str eq "${lines[0]}" 'a: Cleanup:'
+  str eq "${lines[1]}" 'a:   Releasing resources'
+  str eq "${lines[2]}" 'b: Cleanup:'
+  str eq "${lines[3]}" 'b:   Freeing memory'
+}
+
+@test "[false] nested defers" {
+  run_me () {
+    setup
+
+    b () {
+      defer "echo '${FUNCNAME[0]}: Cleanup:'"
+      defer "echo '${FUNCNAME[0]}:   Freeing memory'"
+      false
+    }
+
+    a () {
+      defer "echo '${FUNCNAME[0]}: Cleanup:'"
+      defer "echo '${FUNCNAME[0]}:   Releasing resources'"
+      defer 'b'
+    }
+
+    a
+  }
+  export -f run_me
+
+  run bash -c 'run_me'
+  not eq "${status}" '0'
+  eq "${#lines[@]}" '4'
+  str eq "${lines[0]}" 'a: Cleanup:'
+  str eq "${lines[1]}" 'a:   Releasing resources'
+  str eq "${lines[2]}" 'b: Cleanup:'
+  str eq "${lines[3]}" 'b:   Freeing memory'
+}
+
+@test "[return 1] nested defers" {
+  run_me () {
+    setup
+
+    b () {
+      defer "echo '${FUNCNAME[0]}: Cleanup:'"
+      defer "echo '${FUNCNAME[0]}:   Freeing memory'"
+      return 1
+    }
+
+    a () {
+      defer "echo '${FUNCNAME[0]}: Cleanup:'"
+      defer "echo '${FUNCNAME[0]}:   Releasing resources'"
+      defer 'b'
+    }
+
+    a
+  }
+  export -f run_me
+
+  run bash -c 'run_me'
+  not eq "${status}" '0'
   eq "${#lines[@]}" '4'
   str eq "${lines[0]}" 'a: Cleanup:'
   str eq "${lines[1]}" 'a:   Releasing resources'

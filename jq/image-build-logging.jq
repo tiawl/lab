@@ -1,4 +1,4 @@
-# !/usr/bin/env --split-string gojq --from-file
+#! /usr/bin/env --split-string gojq --from-file
 
 def esc_seq(code): "\u001B[" + code + "m";
 def fg(color): esc_seq("38;5;" + (color | tostring));
