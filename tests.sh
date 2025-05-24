@@ -34,8 +34,8 @@ tests () {
   fi
 
   shopt -s globstar
-  #bats --filter '\[return 1\] nested defers' "${opts[@]}" "${sdir}"/test/**/*.sh
-  bats "${opts[@]}" "${sdir}"/test/**/*.sh
+  #bats --filter '\[return 1\] nested defers' "${opts[@]}" "${sdir}"/bats/**/*.bats
+  bats --formatter "${sdir}/bats/formatter.sh" "${opts[@]}" "${sdir}"/bats/**/*.bats
 }
 
 tests "${@}"

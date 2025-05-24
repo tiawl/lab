@@ -581,7 +581,7 @@ export -f setup
   str eq "${lines[3]}" 'b:   Freeing memory'
 }
 
-@test "[false] nested defers" {
+@test "deferred false" {
   run_me () {
     setup
 
@@ -610,7 +610,7 @@ export -f setup
   str eq "${lines[3]}" 'b:   Freeing memory'
 }
 
-@test "[return 1] nested defers" {
+@test "deferred return 1" {
   run_me () {
     setup
 
@@ -632,6 +632,64 @@ export -f setup
 
   run bash -c 'run_me'
   not eq "${status}" '0'
+  eq "${#lines[@]}" '4'
+  str eq "${lines[0]}" 'a: Cleanup:'
+  str eq "${lines[1]}" 'a:   Releasing resources'
+  str eq "${lines[2]}" 'b: Cleanup:'
+  str eq "${lines[3]}" 'b:   Freeing memory'
+}
+
+@test "[handled] deferred false" {
+  run_me () {
+    setup
+
+    b () {
+      defer "echo '${FUNCNAME[0]}: Cleanup:'"
+      defer "echo '${FUNCNAME[0]}:   Freeing memory'"
+      false
+    }
+
+    a () {
+      defer "echo '${FUNCNAME[0]}: Cleanup:'"
+      defer "echo '${FUNCNAME[0]}:   Releasing resources'"
+      defer 'b'
+    }
+
+    if not a; then :; fi
+  }
+  export -f run_me
+
+  run bash -c 'run_me'
+  eq "${status}" '0'
+  eq "${#lines[@]}" '4'
+  str eq "${lines[0]}" 'a: Cleanup:'
+  str eq "${lines[1]}" 'a:   Releasing resources'
+  str eq "${lines[2]}" 'b: Cleanup:'
+  str eq "${lines[3]}" 'b:   Freeing memory'
+}
+
+@test "[handled] deferred return 1" {
+  run_me () {
+    setup
+
+    b () {
+      defer "echo '${FUNCNAME[0]}: Cleanup:'"
+      defer "echo '${FUNCNAME[0]}:   Freeing memory'"
+      return 1
+    }
+
+    a () {
+      defer "echo '${FUNCNAME[0]}: Cleanup:'"
+      defer "echo '${FUNCNAME[0]}:   Releasing resources'"
+      defer 'b'
+    }
+
+    if not a; then :; fi
+  }
+  export -f run_me
+
+  run bash -c 'run_me'
+  eq "${status}" '0'
   eq "${#lines[@]}" '4'
   str eq "${lines[0]}" 'a: Cleanup:'
   str eq "${lines[1]}" 'a:   Releasing resources'
