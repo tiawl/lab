@@ -655,7 +655,8 @@ export -f setup
       defer 'b'
     }
 
-    if not a; then :; fi
+    trap 'if eq "${?}" 1; then trap - EXIT; exit 0; fi' EXIT
+    a
   }
   export -f run_me
 
@@ -684,7 +685,8 @@ export -f setup
       defer 'b'
     }
 
-    if not a; then :; fi
+    trap 'if eq "${?}" 1; then trap - EXIT; exit 0; fi' EXIT
+    a
   }
   export -f run_me
 
@@ -711,6 +713,132 @@ export -f setup
       fi
     }
 
+    a 1
+  }
+  export -f run_me
+
+  run bash -c 'run_me'
+  eq "${status}" '0'
+  eq "${#lines[@]}" '6'
+  str eq "${lines[0]}" 'a 1: Cleanup:'
+  str eq "${lines[1]}" 'a 1:   Removing temporary file'
+  str eq "${lines[2]}" 'a 2: Cleanup:'
+  str eq "${lines[3]}" 'a 2:   Removing temporary file'
+  str eq "${lines[4]}" 'a 3: Cleanup:'
+  str eq "${lines[5]}" 'a 3:   Removing temporary file'
+}
+
+@test "deferred false into recursive function" {
+  run_me () {
+    setup
+
+    a () {
+      defer "echo '${FUNCNAME[0]} ${1}: Cleanup:'"
+      defer "echo '${FUNCNAME[0]} ${1}:   Removing temporary file'"
+
+      if lt "${1}" '3'
+      then
+        defer "a '$(( ${1} + 1 ))'"
+      else
+        false
+      fi
+    }
+
+    a 1
+  }
+  export -f run_me
+
+  run bash -c 'run_me'
+  not eq "${status}" '0'
+  eq "${#lines[@]}" '6'
+  str eq "${lines[0]}" 'a 1: Cleanup:'
+  str eq "${lines[1]}" 'a 1:   Removing temporary file'
+  str eq "${lines[2]}" 'a 2: Cleanup:'
+  str eq "${lines[3]}" 'a 2:   Removing temporary file'
+  str eq "${lines[4]}" 'a 3: Cleanup:'
+  str eq "${lines[5]}" 'a 3:   Removing temporary file'
+}
+
+@test "deferred return 1 into recursive function" {
+  run_me () {
+    setup
+
+    a () {
+      defer "echo '${FUNCNAME[0]} ${1}: Cleanup:'"
+      defer "echo '${FUNCNAME[0]} ${1}:   Removing temporary file'"
+
+      if lt "${1}" '3'
+      then
+        defer "a '$(( ${1} + 1 ))'"
+      else
+        return 1
+      fi
+    }
+
+    a 1
+  }
+  export -f run_me
+
+  run bash -c 'run_me'
+  not eq "${status}" '0'
+  eq "${#lines[@]}" '6'
+  str eq "${lines[0]}" 'a 1: Cleanup:'
+  str eq "${lines[1]}" 'a 1:   Removing temporary file'
+  str eq "${lines[2]}" 'a 2: Cleanup:'
+  str eq "${lines[3]}" 'a 2:   Removing temporary file'
+  str eq "${lines[4]}" 'a 3: Cleanup:'
+  str eq "${lines[5]}" 'a 3:   Removing temporary file'
+}
+
+@test "[handled] deferred false into recursive function" {
+  run_me () {
+    setup
+
+    a () {
+      defer "echo '${FUNCNAME[0]} ${1}: Cleanup:'"
+      defer "echo '${FUNCNAME[0]} ${1}:   Removing temporary file'"
+
+      if lt "${1}" '3'
+      then
+        defer "a '$(( ${1} + 1 ))'"
+      else
+        false
+      fi
+    }
+
+    trap 'if eq "${?}" 1; then trap - EXIT; exit 0; fi' EXIT
+    a 1
+  }
+  export -f run_me
+
+  run bash -c 'run_me'
+  eq "${status}" '0'
+  eq "${#lines[@]}" '6'
+  str eq "${lines[0]}" 'a 1: Cleanup:'
+  str eq "${lines[1]}" 'a 1:   Removing temporary file'
+  str eq "${lines[2]}" 'a 2: Cleanup:'
+  str eq "${lines[3]}" 'a 2:   Removing temporary file'
+  str eq "${lines[4]}" 'a 3: Cleanup:'
+  str eq "${lines[5]}" 'a 3:   Removing temporary file'
+}
+
+@test "[handled] deferred return 1 into recursive function" {
+  run_me () {
+    setup
+
+    a () {
+      defer "echo '${FUNCNAME[0]} ${1}: Cleanup:'"
+      defer "echo '${FUNCNAME[0]} ${1}:   Removing temporary file'"
+
+      if lt "${1}" '3'
+      then
+        defer "a '$(( ${1} + 1 ))'"
+      else
+        return 1
+      fi
+    }
+
+    trap 'if eq "${?}" 1; then trap - EXIT; exit 0; fi' EXIT
     a 1
   }
   export -f run_me
