@@ -6,10 +6,7 @@ shebangless () {
 
 # executed by setup.sh
 compile () {
-  on errexit inherit_errexit errtrace functrace noclobber nounset pipefail lastpipe extglob checkwinsize
-
-  # (:;:) is a micro sleep to ensure the variables are exported immediately.
-  (:;:)
+  on errexit inherit_errexit errtrace functrace noclobber nounset pipefail lastpipe extglob
 
   harden base64
   harden cat
@@ -18,55 +15,35 @@ compile () {
   harden rm
   harden sed
 
-  local name version help
+  local name version len_cmd src desc
+  local -a help split
   name='murloc'
   version="$(git -C "${SDIR}" describe --match *.*.* --tags --abbrev=9)"
   version="${version%-*}"
   version="${version%\.*}.${version#*-}"
-  help="$(on globstar
-    find_max_size () {
-      cols=
-      if ge "${#entry}" "${COLUMNS}"
+
+  on globstar
+  for src in "${SDIR}/src"/**/*
+  do
+    if is file "${src}"
+    then
+      desc="$(sed -n 's/^\([a-zA-Z_][a-zA-Z0-9_]*\)\s*()\s*{\s*#HELP/\1/p' "${src}" | sed ':loop; s/^\([ a-z]\+\)_/\1 /; t loop')"
+      if str not empty "${desc:-}"
       then
-        cols="$(( ${COLUMNS} - 1 ))"
-        while str not eq "${entry:${cols}:1}" ' '; do (( cols-=1 )); done
-        (( cols+=1 ))
+        help+=( "${desc}" )
       fi
-    }
-    declare -a lines
-    max_width='0'
-    for src in "${SDIR}/src"/**/*
-    do
-      if is file "${src}"
-      then
-        line="$(sed -n 's/^\([a-zA-Z_][a-zA-Z0-9_]*\)\s*()\s*{\s*#HELP/\1/p' "${src}" | sed ':loop; s/^\([ a-z]\+\)_/\1 /; t loop')"
-        if str not empty "${line:-}"
-        then
-          lines+=( "${line}" )
-        fi
-      fi
-    done
-    for line in "${lines[@]}"
-    do
-      mapfile -t -d '|' split <<< "${line}"
-      max_width="$(( ${#split[0]} > ${max_width} ? ${#split[0]} : ${max_width} ))"
-    done
-    for line in "${lines[@]}"
-    do
-      mapfile -t -d '|' split <<< "${line}"
-      printf -v entry -- "        %-${max_width}s %s" "${split[0]}" "${split[1]%$'\n'}"
-      find_max_size
-      printf '%s\\n' "${entry:0:${cols:-"${COLUMNS}"}}"
-      entry="${entry:${cols:-"${COLUMNS}"}}"
-      while gt "${#entry}" '0'
-      do
-        find_max_size
-        printf "        %${max_width}s %s\\n" '' "${entry:0:${cols:-"${COLUMNS}"}}"
-        entry="${entry:${cols:-"${COLUMNS}"}}"
-      done
-    done
-  )"
-  readonly name version help
+    fi
+  done
+  off globstar
+
+  len_cmd='0'
+  for desc in "${help[@]}"
+  do
+    mapfile -t -d '|' split <<< "${desc}"
+    len_cmd="$(( ${#split[0]} > ${len_cmd} ? ${#split[0]} : ${len_cmd} ))"
+  done
+
+  readonly name version help len_cmd
 
   rm -rf "${SDIR}/bin"
   mkdir -p "${SDIR}/bin"
@@ -89,8 +66,53 @@ version () {
 }
 
 help () {
+  cut_line () {
+    local cols
+    cols="\${COLUMNS}"
+    if ge "\${#1}" "\${COLUMNS}"
+    then
+      set -- "\${1}" "\${1:0:\${COLUMNS}}"
+      set -- "\${1}" "\${2% *}"
+      if gt "\${#2}" "\$(( ${len_cmd} + 9 ))" && lt "\${#2}" "\${COLUMNS}"
+      then
+        cols="\$(( \${#2} + 1 ))"
+      fi
+    fi
+    printf '%s\\n' "\${_buf:0:\${cols}}"
+    _buf="\${_buf:\${cols}}"
+  }
+
+  on checkwinsize
+
+  # (:;:) is a micro sleep to ensure the variables are exported immediately.
+  (:;:)
+
+  local desc _buf
+  local -a split
+
   version
-  printf '\nCOMMANDS:\n${help}\n' >&2
+
+  printf '\nCOMMANDS:\n' >&2
+  ${help[@]@A}
+  for desc in "\${help[@]}"
+  do
+    mapfile -t -d '|' split <<< "\${desc}"
+    if gt "\${COLUMNS}" "\$(( ${len_cmd} + 9 ))"
+    then
+      printf -v _buf -- '        %-${len_cmd}s %s' "\${split[0]}" "\${split[1]%$'\n'}"
+      cut_line "\${_buf}"
+      while gt "\${#_buf}" '0'
+      do
+        printf -v _buf '        %${len_cmd}s %s' '' "\${_buf}"
+        cut_line "\${_buf}"
+      done
+    else
+      printf '\t%s\t%s' "\${split[0]}" "\${split[1]}"
+    fi
+  done >&2
+
+  off checkwinsize
+  unset -f cut_line
 }
 
 load_resources () {
