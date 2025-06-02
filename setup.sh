@@ -141,7 +141,7 @@ setup () (
   readonly daemon_json daemon_conf conf_dir etc etc_docker
 
   # copy docker daemon config and restart the Docker daemon
-  if is not present "${daemon_json}" || not gojq --exit-status --null-input --slurpfile file1 "${daemon_json}" --slurpfile file2 "${daemon_conf}" '$file1 == $file2' > /dev/null
+  if is not present "${daemon_json}" || not gojq --exit-status --null-input --slurpfile dest "${daemon_json}" --slurpfile src "${daemon_conf}" '$dest == $src' > /dev/null
   then
     sudo mkdir --parents "${etc_docker}"
     sudo cp --force "${daemon_conf}" "${daemon_json}"

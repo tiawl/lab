@@ -216,18 +216,37 @@ group:
               special: sep
             - literal: '*'
         - image:
-            build:
-              args:
-                inventory: bounce_buildargs
-              context:
-              - literal: ./dockerfiles/bounce
-              image:
-              - key:
-                - literal: image
-                var: project
-              - literal: bounce
-              tag:
-              - var: bounce_tag
+          ###merge:
+            #  image:
+            #  - key:
+            #    - literal: image
+            #    var: project
+            #  - literal: bounce
+            #  tag:
+            #  - var: bounce_tag
+            #  base:
+            #  - key:
+            #    - literal: image
+            #    var: loc
+            #  - literal: alpine
+            #  - key:
+            #    - literal: tag
+            #    special: sep
+            #  - key:
+            #    - literal: alpine
+            #    var: version
+              build:
+                args:
+                  inventory: bounce_buildargs
+                context:
+                - literal: ./dockerfiles/bounce
+                image:
+                - key:
+                  - literal: image
+                  var: project
+                - literal: bounce
+                tag:
+                - var: bounce_tag
   - mutate:
       name:
         var: path

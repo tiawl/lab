@@ -15,18 +15,16 @@ image_build () { #HELP <repository> <tag> <context> [<buildargs>]|Build an image
   repo="${1}"
   tag="${2}"
   context="${3}"
+  json="${4:-"{}"}"
   method='POST'
-  readonly repo tag context method
+  readonly repo tag context json method
 
-  shift 3
-
-  json="$(gojq --monochrome-output --null-input --compact-output '[$ARGS.positional | range(length/2|ceil) as $i | .[2 * $i:2 * $i + 2] | {(first): last}] | add' --args "${@}")"
   endpoint="http://${version[docker_api]}/build?version=2&t=${repo}${sep[tag]}${tag}&buildargs=$(url encode "${json}")"
-  readonly json endpoint
+  readonly endpoint
 
   printf '%s %s\n' "${method}" "$(url decode "${endpoint}")" >&2
 
-  local json_object http_code
+  local response http_code
   coproc HTTP_CODE { sed "${sed[colored_http_code]}"; }
   defer 'exec {HTTP_CODE[1]}>&- 4>&-; read_http_code <&${HTTP_CODE[0]}; wait "${HTTP_CODE_PID}" 2> /dev/null || :; printf "%s\n" "${http_code}" >&2'
 
@@ -34,9 +32,9 @@ image_build () { #HELP <repository> <tag> <context> [<buildargs>]|Build an image
 
   tar --directory "${context}" --create --file=- . \
     | curl --silent --fail --request "${method}" --unix-socket "${path[docker_socket]}" --data-binary '@-' --header 'Content-Type: application/x-tar' --no-buffer --write-out "%{stderr}%{scheme} %{response_code}\n" "${endpoint}" 2>&4 \
-    | while read -r json_object
+    | while read -r response
       do
-        printf '%s' "${json_object}" \
+        printf '%s' "${response}" \
           | {
               filter_docker_output 2>&3 \
                 | decode_buildkit_protobuf

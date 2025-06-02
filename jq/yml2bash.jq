@@ -160,17 +160,133 @@ def sanitize(mode): (
 );
 
 def xtrace(mode): (
-  if (mode == $MODE.user) then (
-    [
-      $NAMESPACE.internal + "xtrace \"" + (.xtrace | remove_useless_quotes) + "\"",
-      .program
-    ]
-  ) else (
-    [
-      .program
-    ]
-  ) end
+  (.before // []) + (
+    if (mode == $MODE.user) then (
+      [
+        $NAMESPACE.internal + "xtrace \"" + (.xtrace | remove_useless_quotes) + "\"",
+        .program
+      ]
+    ) else (
+      [
+        .program
+      ]
+    ) end
+  )
 );
+
+def harden(level; mode): (
+  (
+    .harden |
+    "harden " + (.command | sanitize(mode)) + (
+      if (has("as") and (.as | length > 0)) then (
+        " " + (
+          if (mode != $MODE.internal) then (
+            $NAMESPACE.user
+          ) else "" end
+        ) + (.as | sanitize(mode))
+      ) elif (mode != $MODE.internal) then (
+        " '" + $NAMESPACE.user + "'" + (.command | sanitize(mode)) | gsub("''"; "")
+      ) else "" end
+    )
+  ) | indent(level)
+);
+
+def default_type: (
+  if ((.type == "") or (.type == null)) then (
+    .type = "string"
+  ) else . end
+);
+
+def check_type_coherence: (
+  if ((has("key")) and (.type != "string")) then (
+    "Values into associative or indexed array must be string typed" | exit
+  ) else . end |
+  if ((has("key")) and (has("value")) and (.value | length > 1)) then (
+    "You can not attribute several values to a single key" | exit
+  ) else . end |
+  if ((.type == "string") and (has("value")) and (.value | length > 1)) then (
+    "You can not attribute several values to a string variable" | exit
+  ) else . end
+);
+
+def mutate(level; mode; value_mode): (
+  .mutate | default_type | check_type_coherence | . as $input |
+  if (has("value") | not) then (
+    "You forgot the .mutate.value mandatory field into: " + tostring | exit
+  ) else . end |
+  if (has("scope")) then (
+    "Use assign instead of mutate to attribute a scope for this variable: " + tostring | exit
+  ) else . end |
+  if ((.name | has("var") | not) and (.name | has("special") | not)) then (
+    "In .mutate.name you can only var or special: " + tostring | exit
+  ) else . end |
+  if ((.name | has("var")) and (.name.var | is_legit_varname | not)) then (
+    .name | bad_varname
+  ) else . end |
+  (
+    if ((.name | has("special")) and (.name.special == "last")) then (
+      ": "
+    ) else (
+      if (mode != $MODE.internal) then $NAMESPACE.user else "" end + .name.var + (
+        if (has("key")) then (
+          "[" + (.key | sanitize(mode)) + "]"
+        ) else "" end
+      ) + "="
+    ) end + (
+      if (($input.type == "indexed") or ($input.type == "associative")) then (
+        ("(" + ([.value[] | map(sanitize(value_mode)) | join(" ")] | join(" ")) + ")")
+      ) else (
+        .value[0] | sanitize(mode)
+      ) end
+    )
+  ) | indent(level)
+);
+
+def assign(level; mode): (
+  .assign | default_type | check_type_coherence |
+  if (has("scope") | not) then (
+    "You forgot the .assign.scope mandatory field into: " + tostring | exit
+  ) else . end |
+  if (has("value")) then (
+    "Use mutate instead of assign to change value of this variable: " + tostring | exit
+  ) else . end |
+  (
+    (
+      if (.scope == "global") then (
+        "global "
+      ) elif (.scope == "local") then (
+        "local "
+      ) else (
+        "Unknown .assign.scope: \"" + .type + "\"" | exit
+      ) end
+    ) + (
+      if (.type == "string") then (
+        ""
+      ) elif (.type == "associative") then (
+        "-A "
+      ) elif (.type == "indexed") then (
+        "-a "
+      ) elif (.type == "reference") then (
+        "-n "
+      ) else (
+        "Unknown .assign.type: \"" + .type + "\"" | exit
+      ) end
+    ) + (.vars | map(if (mode != $MODE.internal) then $NAMESPACE.user else "" end + (. | sanitize(mode))) | join(" "))
+  ) | indent(level)
+);
+
+def before_orchestrator(level; mode): {
+  image: {
+    build: (try (
+      .image.build as $build |
+        if $build then [
+          ({assign: {vars: [[{literal: "assoc"}]], type: "associative", scope: "local"}} | assign($NOINDENT; $MODE.internal)),
+          ({mutate: {name: {var: "assoc"}, type: "associative", value: $build.args}} | mutate($NOINDENT; $MODE.internal; mode)),
+          "assoc2json assoc"
+        ] else [] end
+    ) catch [])
+  }
+};
 
 def orchestrator(mode): {
   image: {
@@ -240,8 +356,16 @@ def orchestrator(mode): {
             ($build.image | sanitize(mode)) + " " +
             ($build.tag | sanitize(mode)) + " " +
             ($build.context | sanitize(mode)) + " " +
-            ([$build.args[][] | sanitize(mode)] | join(" "))
+            ([{var: "assoc"}] | sanitize($MODE.internal))
         ) else null end
+    #) catch null),
+    #merge: (try (
+    #  .image.merge as $merge |
+    #    if $merge then (
+    #      "image merge " +
+    #        ($merge.image | sanitize(mode)) + " " +
+    #        ($merge.base | sanitize(mode)) + " " +
+    #        ([$merge.chain[] | .context + " \"" + .args + "\""] | join(" "))
     ) catch null)
   },
   container: {
@@ -322,107 +446,6 @@ def orchestrator(mode): {
     }
   }
 };
-
-def harden(level; mode): (
-  (
-    .harden |
-    "harden " + (.command | sanitize(mode)) + (
-      if (has("as") and (.as | length > 0)) then (
-        " " + (
-          if (mode != $MODE.internal) then (
-            $NAMESPACE.user
-          ) else "" end
-        ) + (.as | sanitize(mode))
-      ) elif (mode != $MODE.internal) then (
-        " '" + $NAMESPACE.user + "'" + (.command | sanitize(mode)) | gsub("''"; "")
-      ) else "" end
-    )
-  ) | indent(level)
-);
-
-def default_type: (
-  if ((.type == "") or (.type == null)) then (
-    .type = "string"
-  ) else . end
-);
-
-def check_type_coherence: (
-  if ((has("key")) and (.type != "string")) then (
-    "Values into associative or indexed array must be string typed" | exit
-  ) else . end |
-  if ((has("key")) and (has("value")) and (.value | length > 1)) then (
-    "You can not attribute several values to a single key" | exit
-  ) else . end |
-  if ((.type == "string") and (has("value")) and (.value | length > 1)) then (
-    "You can not attribute several values to a string variable" | exit
-  ) else . end
-);
-
-def mutate(level; mode): (
-  .mutate | default_type | check_type_coherence | . as $input |
-  if (has("value") | not) then (
-    "You forgot the .mutate.value mandatory field into: " + tostring | exit
-  ) else . end |
-  if (has("scope")) then (
-    "Use assign instead of mutate to attribute a scope for this variable: " + tostring | exit
-  ) else . end |
-  if ((.name | has("var") | not) and (.name | has("special") | not)) then (
-    "In .mutate.name you can only var or special: " + tostring | exit
-  ) else . end |
-  if ((.name | has("var")) and (.name.var | is_legit_varname | not)) then (
-    .name | bad_varname
-  ) else . end |
-  (
-    if ((.name | has("special")) and (.name.special == "last")) then (
-      ": "
-    ) else (
-      if (mode != $MODE.internal) then $NAMESPACE.user else "" end + .name.var + (
-        if (has("key")) then (
-          "[" + (.key | sanitize(mode)) + "]"
-        ) else "" end
-      ) + "="
-    ) end + (
-      if (($input.type == "indexed") or ($input.type == "associative")) then (
-        ("(" + (.value | map(sanitize(mode)) | join(" ")) + ")")
-      ) else (
-        .value[0] | sanitize(mode)
-      ) end
-    )
-  ) | indent(level)
-);
-
-def assign(level; mode): (
-  .assign | default_type | check_type_coherence |
-  if (has("scope") | not) then (
-    "You forgot the .assign.scope mandatory field into: " + tostring | exit
-  ) else . end |
-  if (has("value")) then (
-    "Use mutate instead of assign to change value of this variable: " + tostring | exit
-  ) else . end |
-  (
-    (
-      if (.scope == "global") then (
-        "global "
-      ) elif (.scope == "local") then (
-        "local "
-      ) else (
-        "Unknown .assign.scope: \"" + .type + "\"" | exit
-      ) end
-    ) + (
-      if (.type == "string") then (
-        ""
-      ) elif (.type == "associative") then (
-        "-A "
-      ) elif (.type == "indexed") then (
-        "-a "
-      ) elif (.type == "reference") then (
-        "-n "
-      ) else (
-        "Unknown .assign.type: \"" + .type + "\"" | exit
-      ) end
-    ) + (.vars | map(if (mode != $MODE.internal) then $NAMESPACE.user else "" end + (. | sanitize(mode))) | join(" "))
-  ) | indent(level)
-);
 
 def readonly(level; mode): (
   ("readonly -- " + (.readonly | map(if (mode != $MODE.internal) then $NAMESPACE.user else "" end + (. | sanitize(mode))) | join(" "))) | indent(level)
@@ -554,18 +577,19 @@ def define(level; mode): (
         if (isempty(.[])) then (
           []
         ) else (
-          . as $input | (
-            (
-              orchestrator(mode) |
-                walk(
-                  if (type == "object") then (
-                    with_entries(select((.value != null) and (.value | (type == "object" and length == 0) | not)))
-                  ) else . end
-                ) | .. | select(type == "string")
-            ) // null
-          ) as $program |
+          def filter_orchestrator(expected_type): (
+            walk(
+              if (type == "object") then (
+                with_entries(select((.value != null) and (.value | (type == "object" and length == 0) | not)))
+              ) else . end
+            ) | .. | select(type == expected_type)
+          );
+
+          . as $input |
+          ((orchestrator(mode) | filter_orchestrator("string")) // null) as $program |
           if ($program | type == "string") then (
             {
+              before: ((before_orchestrator(level; mode) | filter_orchestrator("array")) // []),
               program: $program,
               xtrace: $program
             }
@@ -688,7 +712,7 @@ def define(level; mode): (
                   name: $input.into,
                   value: [[{unsafe: ("\"$(" + $group + ")\"")}]]
                 }
-              } | mutate(level | incr_indent_level($offset); $MODE.internal)
+              } | mutate(level | incr_indent_level($offset); $MODE.internal; mode)
             ) else (
               if ((.into | has("var")) and (.into.var | is_legit_varname | not)) then (
                 .into | bad_varname
@@ -709,7 +733,7 @@ def define(level; mode): (
                 name: $input.into,
                 value: [[{unsafe: ("\"$" + $arith + "\"")}]]
               }
-            } | mutate(level | incr_indent_level($offset); $MODE.internal)
+            } | mutate(level | incr_indent_level($offset); $MODE.internal; mode)
           ) elif (has("split")) then (
             ("mapfile -t " + ($input.split | if (has("delimiter")) then ("-d " + (.delimiter | sanitize(mode))) else "" end) + " " + ($input.into | sanitize(mode)) + " <<< " + ($input.split.string | sanitize(mode))) | indent(level | incr_indent_level($offset))
           ) else (
@@ -724,7 +748,7 @@ def define(level; mode): (
       ) elif (has("assign")) then (
         assign(level; mode)
       ) elif (has("mutate")) then (
-        mutate(level; mode)
+        mutate(level; mode; mode)
       ) elif (has("define")) then (
         define(level; mode)
       ) elif (has("readonly")) then (
@@ -874,7 +898,6 @@ def internals(level): (
         group: {
           commands: [
             {on: [[{literal: "errexit"}], [{literal: "inherit_errexit"}], [{literal: "errtrace"}], [{literal: "functrace"}], [{literal: "noclobber"}], [{literal: "nounset"}], [{literal: "pipefail"}], [{literal: "lastpipe"}], [{literal: "extglob"}]]},
-            #{on: [[{literal: "xtrace"}], [{literal: "errexit"}], [{literal: "inherit_errexit"}], [{literal: "errtrace"}], [{literal: "functrace"}], [{literal: "noclobber"}], [{literal: "nounset"}], [{literal: "pipefail"}], [{literal: "lastpipe"}], [{literal: "extglob"}]]},
             {raw: {command: "bash_setup", args: []}},
             {raw: {command: "load_resources", args: []}},
             {raw: {command: "init", args: []}},
@@ -942,7 +965,7 @@ def internals(level): (
               }
             },
             {assign: {vars: [[{literal: "colors"}]], type: "indexed", scope: "local"}},
-            {mutate: {name: {var: "colors"}, type: "indexed", value: ($ARGS.positional | map([{literal: .}]))}},
+            {mutate: {name: {var: "colors"}, type: "indexed", value: [$ARGS.positional | map([{literal: .}])]}},
             {assign: {vars: [[{literal: "ref"}]], type: "reference", scope: "local"}},
             {mutate: {name: {var: "ref"}, value: [[{parameter: 2}]]}},
             {mutate: {name: {var: "ref"}, value: [[{var: "colors", key: [{var: "i"}]}]]}}
