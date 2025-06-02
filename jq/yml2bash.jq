@@ -914,8 +914,9 @@ def internals(level): (
         name: "autoincr",
         group: {
           commands: [
-            {assign: {vars: [[{literal: "REPLY"}]], scope: "global"}},
-            {mutate: {name: {var: "REPLY"}, value: [[{literal: "1"}]]}},
+            {assign: {vars: [[{literal: "ref"}]], type: "reference", scope: "local"}},
+            {mutate: {name: {var: "ref"}, value: [[{parameter: 1}]]}},
+            {mutate: {name: {var: "ref"}, value: [[{literal: "1"}]]}},
             {assign: {vars: [[{literal: "fn"}]], scope: "local"}},
             {
               register: {
@@ -942,8 +943,9 @@ def internals(level): (
             },
             {assign: {vars: [[{literal: "colors"}]], type: "indexed", scope: "local"}},
             {mutate: {name: {var: "colors"}, type: "indexed", value: ($ARGS.positional | map([{literal: .}]))}},
-            {assign: {vars: [[{literal: "REPLY"}]], scope: "global"}},
-            {mutate: {name: {var: "REPLY"}, value: [[{var: "colors", key: [{var: "i"}]}]]}}
+            {assign: {vars: [[{literal: "ref"}]], type: "reference", scope: "local"}},
+            {mutate: {name: {var: "ref"}, value: [[{parameter: 2}]]}},
+            {mutate: {name: {var: "ref"}, value: [[{var: "colors", key: [{var: "i"}]}]]}}
           ]
         }
       }
@@ -953,10 +955,10 @@ def internals(level): (
         name: "xtrace",
         group: {
           commands: [
-            {raw: {command: ($NAMESPACE.internal + "autoincr"), args: []}},
-            {parameters: [[{parameter: 1}], [{var: "REPLY"}]]},
-            {raw: {command: ($NAMESPACE.internal + "color"), args: [[{parameter: 2}]]}},
-            {parameters: [[{parameter: 1}], [{parameter: 2}], [{var: "REPLY"}]]},
+            {raw: {command: ($NAMESPACE.internal + "autoincr"), args: [[{literal: "reply"}]]}},
+            {parameters: [[{parameter: 1}], [{var: "reply"}]]},
+            {raw: {command: ($NAMESPACE.internal + "color"), args: [[{parameter: 2}], [{literal: "reply"}]]}},
+            {parameters: [[{parameter: 1}], [{parameter: 2}], [{var: "reply"}]]},
             {group: {commands: [{print: {format: "%b\\033[1m%s\\033[0m > %s\\n", args: [[{literal: "\\033[38;5;"}, {parameter: 3}, {literal: "m"}], [{parameter: 2}], [{parameter: 1}]]}}], redirections: [{output: {left: {fd: 1}, right: {fd: 2}}}]}}
           ]
         }

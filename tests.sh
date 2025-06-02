@@ -34,7 +34,7 @@ tests () {
   fi
 
   shopt -s globstar
-  #bats --filter '\[return 1\] recursive function' "${opts[@]}" "${sdir}"/bats/**/*.bats
+  #bats --filter 'try' "${opts[@]}" "${sdir}"/bats/**/*.bats
   bats --formatter "${sdir}/bats/formatter.sh" "${opts[@]}" "${sdir}"/bats/**/*.bats
 }
 

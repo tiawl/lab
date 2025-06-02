@@ -178,21 +178,12 @@ defer () {
     }"
     readonly prev_err_trap prev_err_trap_arg fn_prev_return_trap_def fn_prev_err_trap_def
     trap -- "
-      if eq \"\${?}\" 0
-      then
-        if str eq \"\${FUNCNAME[*]}\" \"${FUNCNAME[*]:1}\"
-        then
-          ${pfx}0 RETURN
-          ${fn_prev_return_trap}
-          ${fn_prev_err_trap}
-          unset -f ${fn_prev_return_trap} ${fn_prev_err_trap}
-        fi
-      elif str eq \"\${FUNCNAME[*]}\" \"${FUNCNAME[*]:1}\"
+      if str eq \"\${FUNCNAME[*]}\" \"${FUNCNAME[*]:1}\"
       then
         ${pfx}0 RETURN
+        ${fn_prev_return_trap}
+        ${fn_prev_err_trap}
         unset -f ${fn_prev_return_trap} ${fn_prev_err_trap}
-        ${prev_err_trap_arg//ERR/RETURN}
-        trap - ERR
       fi
     " RETURN
     trap -- "
