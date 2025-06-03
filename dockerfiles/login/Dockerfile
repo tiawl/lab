@@ -9,7 +9,7 @@ ARG UID
 
 RUN <<END_OF_RUN
     set -eux
-    apk --no-cache add openssh-client openssh-server bash
+    apk --no-cache add openssh-server bash
     # fix sshd: no hostkeys available -- exiting
     ssh-keygen -A
     addgroup -S "${USER}"

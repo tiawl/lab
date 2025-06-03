@@ -230,9 +230,11 @@ group:
                 inventory: bounce_base
               chain:
               - context:
-                - literal: ./dockerfiles/bounce
+                - literal: ./dockerfiles/login
                 args:
                   inventory: bounce_buildargs
+              - context:
+                - literal: ./dockerfiles/ssh
   - mutate:
       name:
         var: path

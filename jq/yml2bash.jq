@@ -290,9 +290,9 @@ def before_orchestrator(level; mode): {
         if $merge then ([
           {assign: {vars: [range($merge.chain | length) | [{literal: ("assoc" + tostring)}]], type: "associative", scope: "local"}} | assign($NOINDENT; $MODE.internal)
         ] + [
-          range($merge.chain | length) | {mutate: {name: {var: ("assoc" + tostring)}, type: "associative", value: $merge.chain[.].args}} | mutate($NOINDENT; $MODE.internal; mode)
+          range($merge.chain | length) | {mutate: {name: {var: ("assoc" + tostring)}, type: "associative", value: ($merge.chain[.].args // [])}} | mutate($NOINDENT; $MODE.internal; mode)
         ] + [
-          range($merge.chain | length) | "assoc2json assoc" + tostring
+          "assoc2json " + ([range($merge.chain | length) | "assoc" + tostring] | join(" "))
         ]) else [] end
     ) catch [])
   }
@@ -376,7 +376,7 @@ def orchestrator(mode): {
             ($merge.image | sanitize(mode)) + " " +
             ($merge.tag | sanitize(mode)) + " " +
             ($merge.base | sanitize(mode)) + " " +
-            (range($merge.chain | length) | [($merge.chain[.].context | sanitize(mode)) + " " + ([{var: ("assoc" + tostring)}] | sanitize($MODE.internal))] | join(" "))
+            ([range($merge.chain | length) | ($merge.chain[.].context | sanitize(mode)) + " " + ([{var: ("assoc" + tostring)}] | sanitize($MODE.internal))] | join(" "))
         ) else null end
     ) catch null)
   },
