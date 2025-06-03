@@ -3,10 +3,10 @@
 image_merge () { #HELP <repository> <tag> <base> <context> <buildargs> [<context> <buildargs>] [...]|Build an image from multiple Dockerfiles
   shift
 
-  local repo tag i prev
+  local repo tag i from args
   repo="${1}"
   tag="${2}"
-  prev="${3}"
+  from="${3}"
   i='1'
   readonly repo tag
 
@@ -14,13 +14,17 @@ image_merge () { #HELP <repository> <tag> <base> <context> <buildargs> [<context
 
   while gt "${#}" 0
   do
-    # TODO: check FROM is not used into buildargs
-    image build "${repo}" "stage-${i}" "${1}" 'FROM' "${prev}" "${2}"
+    args="$(gojq --monochrome-output --null-input --compact-output "${2}"' + {FROM: "'"${from}"'"}')"
+    if gt "${#}" 2
+    then
+      image build "${repo}" "${tag}-stage-${i}" "${1}" "${args}"
+    else
+      image build "${repo}" "${tag}" "${1}" "${args}"
+    fi
     shift 2
-    prev="${repo}${sep[tag]}stage-${i}"
+    from="${repo}${sep[tag]}${tag}-stage-${i}"
     (( i++ ))
   done
 
-  (( i-- ))
-  image tag create "{repo}" "stage-${i}" "${repo}" "${tag}"
+  image prune "${repo}${sep[tag]}${tag}-stage-*"
 }

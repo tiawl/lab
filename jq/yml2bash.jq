@@ -284,6 +284,16 @@ def before_orchestrator(level; mode): {
           ({mutate: {name: {var: "assoc"}, type: "associative", value: $build.args}} | mutate($NOINDENT; $MODE.internal; mode)),
           "assoc2json assoc"
         ] else [] end
+    ) catch []),
+    merge: (try (
+      .image.merge as $merge |
+        if $merge then ([
+          {assign: {vars: [range($merge.chain | length) | [{literal: ("assoc" + tostring)}]], type: "associative", scope: "local"}} | assign($NOINDENT; $MODE.internal)
+        ] + [
+          range($merge.chain | length) | {mutate: {name: {var: ("assoc" + tostring)}, type: "associative", value: $merge.chain[.].args}} | mutate($NOINDENT; $MODE.internal; mode)
+        ] + [
+          range($merge.chain | length) | "assoc2json assoc" + tostring
+        ]) else [] end
     ) catch [])
   }
 };
@@ -358,14 +368,16 @@ def orchestrator(mode): {
             ($build.context | sanitize(mode)) + " " +
             ([{var: "assoc"}] | sanitize($MODE.internal))
         ) else null end
-    #) catch null),
-    #merge: (try (
-    #  .image.merge as $merge |
-    #    if $merge then (
-    #      "image merge " +
-    #        ($merge.image | sanitize(mode)) + " " +
-    #        ($merge.base | sanitize(mode)) + " " +
-    #        ([$merge.chain[] | .context + " \"" + .args + "\""] | join(" "))
+    ) catch null),
+    merge: (try (
+      .image.merge as $merge |
+        if $merge then (
+          "image merge " +
+            ($merge.image | sanitize(mode)) + " " +
+            ($merge.tag | sanitize(mode)) + " " +
+            ($merge.base | sanitize(mode)) + " " +
+            (range($merge.chain | length) | [($merge.chain[.].context | sanitize(mode)) + " " + ([{var: ("assoc" + tostring)}] | sanitize($MODE.internal))] | join(" "))
+        ) else null end
     ) catch null)
   },
   container: {
