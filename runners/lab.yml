@@ -187,8 +187,9 @@ group:
         - image:
             tag:
               compute:
-                context:
-                - literal: ./dockerfiles/bounce
+                directories:
+                - - literal: ./dockerfiles/login
+                - - literal: ./dockerfiles/ssh
                 buildargs:
                   inventory: bounce_buildargs
   - if:

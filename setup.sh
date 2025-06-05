@@ -34,11 +34,11 @@ setup () (
   # cleanup done: now it is time to define needed functions
 
   not () { ! "${@}"; }
-  eq () { (( "${1}" == "${2}" )); }
-  gt () { (( "${1}" > "${2}" )); }
-  lt () { (( "${1}" < "${2}" )); }
-  ge () { (( "${1}" >= "${2}" )); }
-  le () { (( "${1}" <= "${2}" )); }
+  eq () { return "$(( 1 - (${1} == ${2}) ))"; }
+  gt () { return "$(( 1 - (${1} > ${2}) ))"; }
+  lt () { return "$(( 1 - (${1} < ${2}) ))"; }
+  ge () { return "$(( 1 - (${1} >= ${2}) ))"; }
+  le () { return "$(( 1 - (${1} <= ${2}) ))"; }
 
   is () {
     case "${1}" in
@@ -92,7 +92,7 @@ setup () (
   if is not file /etc/os-release
   then
     # get_distribution () comment into https://get.docker.com/ script
-    error 'Can not find /etc/os-release. The OS where this script is running is probably not officialy supported by Docker.'
+    error 'Can not find /etc/os-release'
   fi
 
   dist="$(. /etc/os-release && printf '%s\n' "${ID}")"
@@ -100,30 +100,34 @@ setup () (
 
   case "${dist}" in
   ( 'ubuntu'|'debian' )
-    if has not base64 && \
-       has not env && \
-       has not mktemp && \
-       has not sha256sum && \
-       has not shuf && \
-       has not tee && \
-       has not bc && \
-       has not bash && \
-       has not curl && \
-       has not git && \
-       has not gojq && \
-       has not protoc && \
-       has not sed && \
-       has not tar
-    then
-      sudo apt-get update --assume-yes
+    install () {
+      set -- "${1%"${1##*[![:space:]]}"} " "${2}"
 
-      # coreutils: GNU-base64, GNU-env, GNU-mktemp, GNU-sha256sum, GNU-shuf and GNU-tee
-      # bc: currently not needed but it could be useful for potention evolution
-      sudo apt-get install --assume-yes \
-        coreutils \
-        bc \
-        bash curl git gojq protobuf-compiler sed tar
-    fi ;;
+      while gt "${#1}" '0'
+      do
+        if has not "${1%% *}"
+        then
+          sudo apt-get update --assume-yes
+
+          set -f
+          sudo apt-get install --assume-yes ${2}
+          set +f
+
+          break
+        fi
+        set -- "${1#* }" "${2}"
+      done
+    }
+
+    install 'base64 env mktemp sha256sum shuf tee' coreutils
+    install bc bc
+    install bash bash
+    install curl curl
+    install git git
+    install gojq gojq
+    install protoc protobuf-compiler
+    install sed sed
+    install tar tar ;;
   ( * ) error 'Unknown OS: %s' "${dist}" ;;
   esac
 
@@ -155,7 +159,16 @@ setup () (
 
   # TODO: add buildkitd socket
 
-  exec env --ignore-environment SDIR="${sdir}" BASH_ENV="${sdir}/src/utils.sh" bash --norc --noprofile "${sdir}/compile.sh"
+  tmp="$(mktemp --directory)"
+  readonly tmp
+
+  #git clone -- 'https://github.com/tiawl/murloc' "${tmp}"
+  cp -r ../murloc/. "${tmp}"
+
+  env --ignore-environment SDIR="${tmp}" BASH_ENV="${tmp}/src/utils.sh" bash --norc --noprofile "${tmp}/compile.sh"
+
+  mv "${tmp}/bin/murloc" ~/.local/bin/
+  rm -rf "${tmp}"
 )
 
 setup "${@}"
