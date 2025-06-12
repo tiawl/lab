@@ -1,3 +1,7 @@
+name: lab
+import:
+- bounce/up.yml
+  #- runners/bounce/stop.yml
 inventory:
   bounce_base:
   - key:
@@ -254,90 +258,13 @@ group:
       - - var: ssh_home
   - readonly:
     - - literal: path
-  - if:
-      not:
-        group:
-          commands:
-          - container:
-              status:
-                created:
-                - var: project
-                  key:
-                  - literal: container
-                - literal: bounce
-      group:
-        commands:
-        - container:
-            create:
-              name:
-              - var: project
-                key:
-                - literal: container
-              - literal: bounce
-              image:
-              - var: project
-                key:
-                - literal: image
-              - literal: bounce
-              hostname:
-              - literal: bounce
-        - defer:
-            image:
-              builder:
-                prune: true
-        - container:
-            resource:
-              copy:
-                name:
-                - var: project
-                  key:
-                  - literal: container
-                - literal: bounce
-                src:
-                - var: path
-                  key:
-                  - literal: bounce_ssh_key
-                dest:
-                - var: path
-                  key:
-                  - literal: ssh_home
-        - container:
-            resource:
-              copy:
-                name:
-                - var: project
-                  key:
-                  - literal: container
-                - literal: bounce
-                src:
-                - var: path
-                  key:
-                  - literal: bounce_ssh_key
-                - literal: .pub
-                dest:
-                - var: path
-                  key:
-                  - literal: ssh_home
-  - if:
-      not:
-        group:
-          commands:
-          - container:
-              status:
-                running:
-                - var: project
-                  key:
-                  - literal: container
-                - literal: bounce
-      group:
-        commands:
-        - container:
-            start:
-              name:
-              - var: project
-                key:
-                - literal: container
-              - literal: bounce
+  - runner:
+      exec:
+        file: ./bounce/up.yml
+  - defer:
+      image:
+        builder:
+          prune: true
   - defer:
       container:
         stop:
