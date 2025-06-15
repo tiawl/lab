@@ -1,7 +1,7 @@
 name: lab
 import:
 - bounce/up.yml
-  #- runners/bounce/stop.yml
+#- bounce/stop.yml
 inventory:
   bounce_base:
   - key:
@@ -260,7 +260,7 @@ group:
     - - literal: path
   - runner:
       exec:
-        file: ./bounce/up.yml
+        imported: ./bounce/up.yml
   - defer:
       image:
         builder:

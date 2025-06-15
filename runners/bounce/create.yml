@@ -1,0 +1,62 @@
+group:
+  commands:
+  - if:
+      not:
+        group:
+          commands:
+          - container:
+              status:
+                created:
+                - var: project
+                  key:
+                  - literal: container
+                - literal: bounce
+      group:
+        commands:
+        - container:
+            create:
+              name:
+              - var: project
+                key:
+                - literal: container
+              - literal: bounce
+              image:
+              - var: project
+                key:
+                - literal: image
+              - literal: bounce
+              hostname:
+              - literal: bounce
+        - container:
+            resource:
+              copy:
+                name:
+                - var: project
+                  key:
+                  - literal: container
+                - literal: bounce
+                src:
+                - var: path
+                  key:
+                  - literal: bounce_ssh_key
+                dest:
+                - var: path
+                  key:
+                  - literal: ssh_home
+        - container:
+            resource:
+              copy:
+                name:
+                - var: project
+                  key:
+                  - literal: container
+                - literal: bounce
+                src:
+                - var: path
+                  key:
+                  - literal: bounce_ssh_key
+                - literal: .pub
+                dest:
+                - var: path
+                  key:
+                  - literal: ssh_home
