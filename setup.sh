@@ -162,12 +162,12 @@ setup () (
   tmp="$(mktemp --directory)"
   readonly tmp
 
-  #git clone -- 'https://github.com/tiawl/murloc' "${tmp}"
-  cp -r ../murloc/. "${tmp}"
+  #git clone -- 'https://github.com/tiawl/placid' "${tmp}"
+  cp -r ../placid/. "${tmp}"
 
   env --ignore-environment SDIR="${tmp}" BASH_ENV="${tmp}/src/utils.sh" bash --norc --noprofile "${tmp}/compile.sh"
 
-  mv "${tmp}/bin/murloc" ~/.local/bin/
+  mv "${tmp}/bin/placid" ~/.local/bin/
   rm -rf "${tmp}"
 )
 

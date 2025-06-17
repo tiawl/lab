@@ -1,8 +1,8 @@
 name: lab
 import:
-- base/pull.yml
-- bounce/build.yml
-- bounce/up.yml
+- images/base/pull.yml
+- images/bounce/build.yml
+- containers/bounce/up.yml
 inventory:
   bounce_base:
   - key:
@@ -103,7 +103,7 @@ group:
     - - literal: project
   - runner:
       exec:
-        imported: ./base/pull.yml
+        imported: images/base/pull.yml
   - mutate:
       name:
         var: ssh_home
@@ -121,7 +121,7 @@ group:
     - - literal: key_name
   - runner:
       exec:
-        imported: ./bounce/build.yml
+        imported: images/bounce/build.yml
   - mutate:
       name:
         var: path
@@ -142,7 +142,7 @@ group:
     - - literal: path
   - runner:
       exec:
-        imported: ./bounce/up.yml
+        imported: containers/bounce/up.yml
   - defer:
       image:
         builder:
