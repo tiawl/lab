@@ -1,7 +1,8 @@
 name: lab
 import:
+- base/pull.yml
+- bounce/build.yml
 - bounce/up.yml
-#- bounce/stop.yml
 inventory:
   bounce_base:
   - key:
@@ -100,74 +101,9 @@ group:
   - readonly:
     - - literal: loc
     - - literal: project
-  - if:
-      not:
-        group:
-          commands:
-          - image:
-              tag:
-                defined:
-                  image:
-                  - key:
-                    - literal: image
-                    var: loc
-                  - literal: alpine
-                  tag:
-                  - key:
-                    - literal: alpine
-                    var: version
-      group:
-        commands:
-        - image:
-            pull:
-              image:
-              - literal: alpine
-              library:
-              - literal: library
-              registry:
-              - literal: docker.io
-              tag:
-              - key:
-                - literal: alpine
-                var: version
-        - image:
-            prune:
-            - key:
-              - literal: image
-              var: loc
-            - literal: alpine
-            - key:
-              - literal: tag
-              special: sep
-            - literal: '*'
-        - image:
-            tag:
-              create:
-                from:
-                  image:
-                  - literal: alpine
-                  tag:
-                  - key:
-                    - literal: alpine
-                    var: version
-                to:
-                  image:
-                  - key:
-                    - literal: image
-                    var: loc
-                  - literal: alpine
-                  tag:
-                  - key:
-                    - literal: alpine
-                    var: version
-        - image:
-            remove:
-              image:
-              - literal: alpine
-              tag:
-              - key:
-                - literal: alpine
-                var: version
+  - runner:
+      exec:
+        imported: ./base/pull.yml
   - mutate:
       name:
         var: ssh_home
@@ -183,63 +119,9 @@ group:
   - readonly:
     - - literal: ssh_home
     - - literal: key_name
-  - register:
-      into:
-        var: bounce_tag
-      group:
-        commands:
-        - image:
-            tag:
-              compute:
-                directories:
-                - - literal: ./dockerfiles/login
-                - - literal: ./dockerfiles/ssh
-                buildargs:
-                  inventory: bounce_buildargs
-  - if:
-      not:
-        group:
-          commands:
-          - image:
-              tag:
-                defined:
-                  image:
-                  - key:
-                    - literal: image
-                    var: project
-                  - literal: bounce
-                  tag:
-                  - var: bounce_tag
-      group:
-        commands:
-        - image:
-            prune:
-            - key:
-              - literal: image
-              var: project
-            - literal: bounce
-            - key:
-              - literal: tag
-              special: sep
-            - literal: '*'
-        - image:
-            merge:
-              image:
-              - key:
-                - literal: image
-                var: project
-              - literal: bounce
-              tag:
-              - var: bounce_tag
-              base:
-                inventory: bounce_base
-              chain:
-              - context:
-                - literal: ./dockerfiles/login
-                args:
-                  inventory: bounce_buildargs
-              - context:
-                - literal: ./dockerfiles/ssh
+  - runner:
+      exec:
+        imported: ./bounce/build.yml
   - mutate:
       name:
         var: path

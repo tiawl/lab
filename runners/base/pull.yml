@@ -1,0 +1,70 @@
+group:
+  commands:
+  - if:
+      not:
+        group:
+          commands:
+          - image:
+              tag:
+                defined:
+                  image:
+                  - key:
+                    - literal: image
+                    var: loc
+                  - literal: alpine
+                  tag:
+                  - key:
+                    - literal: alpine
+                    var: version
+      group:
+        commands:
+        - image:
+            pull:
+              image:
+              - literal: alpine
+              library:
+              - literal: library
+              registry:
+              - literal: docker.io
+              tag:
+              - key:
+                - literal: alpine
+                var: version
+        - image:
+            prune:
+            - key:
+              - literal: image
+              var: loc
+            - literal: alpine
+            - key:
+              - literal: tag
+              special: sep
+            - literal: '*'
+        - image:
+            tag:
+              create:
+                from:
+                  image:
+                  - literal: alpine
+                  tag:
+                  - key:
+                    - literal: alpine
+                    var: version
+                to:
+                  image:
+                  - key:
+                    - literal: image
+                    var: loc
+                  - literal: alpine
+                  tag:
+                  - key:
+                    - literal: alpine
+                    var: version
+        - image:
+            remove:
+              image:
+              - literal: alpine
+              tag:
+              - key:
+                - literal: alpine
+                var: version
