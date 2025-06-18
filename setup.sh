@@ -30,6 +30,7 @@ setup () (
   done
   set +f
   IFS="${old_ifs}"
+  unset func
 
   # cleanup done: now it is time to define needed functions
 
@@ -63,6 +64,13 @@ setup () (
     ( 'empty' ) [ -z "${2}" ] ;;
     ( 'eq' ) [ "${2}" = "${3}" ] ;;
     esac
+  }
+
+  basename () {
+    set -- "${1%"${1##*[!/]}"}" "${2:-}"
+    set -- "${1##*/}" "${2:-}"
+    set -- "${1%"${2:-}"}"
+    printf '%s\n' "${1:-/}"
   }
 
   dirname () {
@@ -152,10 +160,15 @@ setup () (
     sudo systemctl restart docker
   fi
 
-  if is not present /etc/ssh/ssh_config.d/accept-new.conf
-  then
-    sudo cp "${sdir}/host/etc/ssh/ssh_config.d/accept-new.conf" /etc/ssh/ssh_config.d
-  fi
+  for ssh_conf in "${sdir}/host/etc/ssh/ssh_config.d/"*
+  do
+    ssh_conf="$(basename "${ssh_conf}")"
+    if is not present "/etc/ssh/ssh_config.d/${ssh_conf}" || ! cmp -s "${sdir}/host/etc/ssh/ssh_config.d/${ssh_conf}" "/etc/ssh/ssh_config.d/${ssh_conf}"
+    then
+      sudo cp "${sdir}/host/etc/ssh/ssh_config.d/${ssh_conf}" /etc/ssh/ssh_config.d
+    fi
+  done
+  unset ssh_conf
 
   # TODO: add buildkitd socket
 

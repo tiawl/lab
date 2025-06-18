@@ -56,4 +56,11 @@ group:
                 args:
                   inventory: bounce_buildargs
               - context:
+                - literal: ./dockerfiles/tmux
+                args:
+                - key:
+                  - literal: USER
+                  value:
+                  - special: USER
+              - context:
                 - literal: ./dockerfiles/ssh
