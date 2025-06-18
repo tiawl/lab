@@ -60,3 +60,24 @@ group:
                 - var: path
                   key:
                   - literal: ssh_home
+        - network:
+            disconnect:
+              network:
+              - literal: bridge
+              container:
+              - var: project
+                key:
+                - literal: container
+              - literal: bounce
+        - network:
+            connect:
+              network:
+              - var: project
+                key:
+                - literal: network
+              - literal: ssh
+              container:
+              - var: project
+                key:
+                - literal: container
+              - literal: bounce

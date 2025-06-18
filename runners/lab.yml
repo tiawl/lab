@@ -3,6 +3,7 @@ import:
 - images/base/pull.yml
 - images/bounce/build.yml
 - containers/bounce/up.yml
+- networks/ssh/create.yml
 inventory:
   bounce_base:
   - key:
@@ -85,6 +86,16 @@ group:
       name:
         var: project
       key:
+      - literal: network
+      value:
+      - - special: RUNNER
+        - key:
+          - literal: network
+          special: sep
+  - mutate:
+      name:
+        var: project
+      key:
       - literal: image
       value:
       - - special: RUNNER
@@ -142,6 +153,9 @@ group:
     - - literal: path
   - runner:
       exec:
+        imported: networks/ssh/create.yml
+  - runner:
+      exec:
         imported: containers/bounce/up.yml
   - defer:
       image:
@@ -166,6 +180,11 @@ group:
                   key:
                   - literal: container
                 - literal: bounce
+                network:
+                - var: project
+                  key:
+                  - literal: network
+                - literal: ssh
       into:
         var: bounce_ip
   - readonly:

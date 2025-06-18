@@ -1,0 +1,23 @@
+group:
+  commands:
+  - if:
+      not:
+        group:
+          commands:
+          - network:
+              created:
+                name:
+                - var: project
+                  key:
+                  - literal: network
+                - literal: ssh
+      group:
+        commands:
+        - network:
+            create:
+              name:
+              - var: project
+                key:
+                - literal: network
+              - literal: ssh
+              isolated: true
