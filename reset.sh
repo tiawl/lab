@@ -1,10 +1,27 @@
 #! /bin/sh
 
 reset () {
+
   # TODO: replace docker calls with placid
-  docker container rm -f $(docker container ls -q --filter 'name=^lab\.' --filter 'status=exited' --filter 'status=running' --filter 'status=created')
-  docker network rm -f $(docker network ls -q --filter 'name=^lab\.')
+
+  containers="$(docker container ls -q --filter 'name=^lab\.' --filter 'status=exited' --filter 'status=running' --filter 'status=created')"
+  if [ -n "${containers:-}" ]
+  then
+    set -f
+    docker container rm -f ${containers}
+    set +f
+  fi
+
+  networks="$(docker network ls -q --filter 'name=^lab\.')"
+  if [ -n "${networks:-}" ]
+  then
+    set -f
+    docker network rm -f ${networks}
+    set +f
+  fi
+
   # TODO: same thing for volumes or not ??
+
   docker image prune --all -f
   docker buildx prune -f
   ./setup.sh

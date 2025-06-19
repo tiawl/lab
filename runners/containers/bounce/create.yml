@@ -13,6 +13,14 @@ group:
                 - literal: bounce
       group:
         commands:
+        - register:
+            into:
+              var: bounce_theme
+            group:
+              commands:
+              - call:
+                  command: new_instance_theme
+                  args: []
         - container:
             create:
               name:

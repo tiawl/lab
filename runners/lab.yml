@@ -56,12 +56,45 @@ group:
       scope: local
   - assign:
       vars:
+      - - literal: instance_counter
+      - - literal: bounce_theme
+      scope: global
+  - assign:
+      vars:
       - - literal: loc
       - - literal: project
       - - literal: version
       - - literal: path
       type: associative
       scope: local
+  - define:
+      name: new_instance_theme
+      group:
+        commands:
+        - assign:
+            vars:
+            - - literal: output
+            scope: local
+        - register:
+            into:
+              var: instance_counter
+            arithmetic:
+              addition:
+                left:
+                  var: instance_counter
+                  default:
+                  - number: -1
+                right:
+                  number: 1
+        - color:
+            index:
+            - var: instance_counter
+            ref:
+            - literal: output
+        - print:
+            format: '%s'
+            args:
+            - - var: output
   - mutate:
       name:
         var: loc
@@ -108,7 +141,7 @@ group:
       key:
       - literal: alpine
       value:
-      - - literal: "3.21"
+      - - literal: "3.22"
   - readonly:
     - - literal: loc
     - - literal: project
@@ -194,6 +227,21 @@ group:
       args:
       - - literal: -R
       - - var: bounce_ip
+  - call:
+      command: ssh
+      args:
+      - - literal: -i
+      - - var: path
+          key:
+          - literal: ssh_home
+        - literal: /
+        - var: key_name
+      - - special: USER
+        - literal: '@'
+        - var: bounce_ip
+      - - literal: '"echo \"export THEME='
+        - var: bounce_theme
+        - literal: '\" >> /etc/profile.d/10theme.sh"'
   - call:
       command: ssh
       args:

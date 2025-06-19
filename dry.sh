@@ -2,7 +2,7 @@
 
 dry () {
   ./setup.sh
-  placid runner dry ./runners/lab.yml
+  placid runner dry ./runners/lab.yml | cat -n
 }
 
 dry "${@}"
