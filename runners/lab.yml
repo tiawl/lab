@@ -241,7 +241,7 @@ group:
         - var: bounce_ip
       - - literal: '"echo \"export THEME='
         - var: bounce_theme
-        - literal: '\" >> /etc/profile.d/10theme.sh"'
+        - literal: '\" >> /home/user/.bash_profile"'
   - call:
       command: ssh
       args:
