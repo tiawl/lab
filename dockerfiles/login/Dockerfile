@@ -17,6 +17,8 @@ RUN <<END_OF_RUN
     echo "${USER}:*" | chpasswd -e
 END_OF_RUN
 
+COPY copyme/ /
+
 USER ${USER}
 
 RUN <<END_OF_RUN
@@ -25,9 +27,9 @@ RUN <<END_OF_RUN
     # generate host key
     ssh-keygen -q -t rsa -N '' -f "${SSH_HOME}/${KEY_NAME}"
     cp "${SSH_HOME}/${KEY_NAME}.pub" "${SSH_HOME}/authorized_keys"
+    mv /tmp/.bash_profile ~
+    mkdir -p ~/.bash_profile.d
 END_OF_RUN
-
-COPY copyme/ /
 
 USER root
 

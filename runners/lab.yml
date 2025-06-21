@@ -239,9 +239,9 @@ group:
       - - special: USER
         - literal: '@'
         - var: bounce_ip
-      - - literal: '"echo \"export THEME='
+      - - literal: '"printf \"THEME=%b%d%b\\nexport THEME\\n\" \"\047\" \"'
         - var: bounce_theme
-        - literal: '\" >> /home/user/.bash_profile"'
+        - literal: '\" \"\047\" >> /home/user/.bash_profile.d/10theme.sh"'
   - call:
       command: ssh
       args:

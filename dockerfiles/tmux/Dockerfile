@@ -17,8 +17,11 @@ USER ${USER}
 
 RUN <<END_OF_RUN
     git clone --depth 1 https://github.com/tmux-plugins/tpm ~/.tmux/plugins/tpm
-    cp /tmp/.tmux.conf ~
-    rm -f /tmp/.tmux.conf
+    mv /tmp/.tmux.conf ~
+    for file in /tmp/.bash_profile.d/*
+    do
+      mv "${file}" ~/.bash_profile.d/
+    done
 END_OF_RUN
 
 USER root
