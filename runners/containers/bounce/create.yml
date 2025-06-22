@@ -80,10 +80,7 @@ group:
         - network:
             connect:
               network:
-              - var: project
-                key:
-                - literal: network
-              - literal: ssh
+                inventory: ext_ssh_bridge_network_name
               container:
               - var: project
                 key:

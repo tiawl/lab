@@ -3,7 +3,7 @@ import:
 - images/base/pull.yml
 - images/bounce/build.yml
 - containers/bounce/up.yml
-- networks/ssh/create.yml
+- networks/ext.ssh.bridge/create.yml
 inventory:
   bounce_base:
   - key:
@@ -37,6 +37,19 @@ inventory:
     - literal: UID
     value:
     - special: UID
+  ext_ssh_bridge_network_name:
+  - var: project
+    key:
+    - literal: network
+  - literal: ext
+  - special: sep
+    key:
+    - literal: network
+  - literal: ssh
+  - special: sep
+    key:
+    - literal: network
+  - literal: bridge
 group:
   commands:
   - harden:
@@ -186,7 +199,7 @@ group:
     - - literal: path
   - runner:
       exec:
-        imported: networks/ssh/create.yml
+        imported: networks/ext.ssh.bridge/create.yml
   - runner:
       exec:
         imported: containers/bounce/up.yml
@@ -214,10 +227,7 @@ group:
                   - literal: container
                 - literal: bounce
                 network:
-                - var: project
-                  key:
-                  - literal: network
-                - literal: ssh
+                  inventory: ext_ssh_bridge_network_name
       into:
         var: bounce_ip
   - readonly:

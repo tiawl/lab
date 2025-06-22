@@ -7,17 +7,11 @@ group:
           - network:
               created:
                 name:
-                - var: project
-                  key:
-                  - literal: network
-                - literal: ssh
+                  inventory: ext_ssh_bridge_network_name
       group:
         commands:
         - network:
             create:
               name:
-              - var: project
-                key:
-                - literal: network
-              - literal: ssh
+                inventory: ext_ssh_bridge_network_name
               isolated: true
