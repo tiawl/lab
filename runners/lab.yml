@@ -3,7 +3,7 @@ import:
 - images/base/pull.yml
 - images/bounce/build.yml
 - containers/bounce/up.yml
-- networks/ext.ssh.bridge/create.yml
+- networks/ext-ssh-bridge/create.yml
 inventory:
   bounce_base:
   - key:
@@ -199,7 +199,7 @@ group:
     - - literal: path
   - runner:
       exec:
-        imported: networks/ext.ssh.bridge/create.yml
+        imported: networks/ext-ssh-bridge/create.yml
   - runner:
       exec:
         imported: containers/bounce/up.yml
