@@ -4,6 +4,7 @@ import:
 - images/bounce/build.yml
 - containers/bounce/up.yml
 - networks/ext-ssh-bridge/create.yml
+- volumes/int-ssh-main-keys/create.yml
 inventory:
   alpine_image:
   - key:
@@ -33,6 +34,23 @@ inventory:
     key:
     - literal: network
   - literal: bridge
+  int_ssh_main_keys:
+  - var: project
+    key:
+    - literal: volume
+  - literal: int
+  - special: sep
+    key:
+    - literal: network
+  - literal: ssh
+  - special: sep
+    key:
+    - literal: network
+  - literal: main
+  - special: sep
+    key:
+    - literal: volume
+  - literal: keys
 group:
   commands:
   - harden:
@@ -115,6 +133,16 @@ group:
       name:
         var: project
       key:
+      - literal: image
+      value:
+      - - special: RUNNER
+        - key:
+          - literal: image
+          special: sep
+  - mutate:
+      name:
+        var: project
+      key:
       - literal: network
       value:
       - - special: RUNNER
@@ -125,11 +153,11 @@ group:
       name:
         var: project
       key:
-      - literal: image
+      - literal: volume
       value:
       - - special: RUNNER
         - key:
-          - literal: image
+          - literal: volume
           special: sep
   - mutate:
       name:
@@ -183,6 +211,9 @@ group:
   - runner:
       exec:
         imported: networks/ext-ssh-bridge/create.yml
+  - runner:
+      exec:
+        imported: volumes/int-ssh-main-keys/create.yml
   - runner:
       exec:
         imported: containers/bounce/up.yml

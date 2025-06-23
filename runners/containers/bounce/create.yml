@@ -35,6 +35,24 @@ group:
               - literal: bounce
               hostname:
               - literal: bounce
+              volumes:
+              - source:
+                  inventory: int_ssh_main_keys
+                target:
+                - literal: /data/
+                - literal: int
+                - special: sep
+                  key:
+                  - literal: network
+                - literal: ssh
+                - special: sep
+                  key:
+                  - literal: network
+                - literal: main
+                - special: sep
+                  key:
+                  - literal: volume
+                - literal: keys
         - container:
             resource:
               copy:
