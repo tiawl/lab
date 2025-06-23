@@ -5,7 +5,7 @@ import:
 - containers/bounce/up.yml
 - networks/ext-ssh-bridge/create.yml
 inventory:
-  bounce_base:
+  alpine_image:
   - key:
     - literal: image
     var: loc
@@ -16,27 +16,10 @@ inventory:
   - key:
     - literal: alpine
     var: version
-  bounce_buildargs:
-  - key:
-    - literal: FROM
-    value:
-      inventory: bounce_base
-  - key:
-    - literal: KEY_NAME
-    value:
-    - var: key_name
-  - key:
-    - literal: USER
-    value:
-    - special: USER
-  - key:
-    - literal: SSH_HOME
-    value:
-    - var: ssh_home
-  - key:
-    - literal: UID
-    value:
-    - special: UID
+  bounce_base:
+    inventory: alpine_image
+  controller_base:
+    inventory: alpine_image
   ext_ssh_bridge_network_name:
   - var: project
     key:
@@ -63,7 +46,7 @@ group:
   - assign:
       vars:
       - - literal: ssh_home
-      - - literal: key_name
+      - - literal: ext_ssh_bridge_key_name
       - - literal: bounce_ip
       - - literal: bounce_tag
       scope: local
@@ -170,12 +153,12 @@ group:
         - literal: /.ssh
   - mutate:
       name:
-        var: key_name
+        var: ext_ssh_bridge_key_name
       value:
       - - literal: host2lab
   - readonly:
     - - literal: ssh_home
-    - - literal: key_name
+    - - literal: ext_ssh_bridge_key_name
   - runner:
       exec:
         imported: images/bounce/build.yml
@@ -187,7 +170,7 @@ group:
       value:
       - - var: ssh_home
         - literal: /
-        - var: key_name
+        - var: ext_ssh_bridge_key_name
   - mutate:
       name:
         var: path
@@ -245,7 +228,7 @@ group:
           key:
           - literal: ssh_home
         - literal: /
-        - var: key_name
+        - var: ext_ssh_bridge_key_name
       - - special: USER
         - literal: '@'
         - var: bounce_ip
@@ -260,7 +243,7 @@ group:
           key:
           - literal: ssh_home
         - literal: /
-        - var: key_name
+        - var: ext_ssh_bridge_key_name
       - - special: USER
         - literal: '@'
         - var: bounce_ip

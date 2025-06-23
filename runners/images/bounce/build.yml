@@ -1,3 +1,55 @@
+inventory:
+  bounce_chain:
+  - context:
+    - literal: ./dockerfiles/layers/login
+    args:
+    - key:
+      - literal: FROM
+      value:
+        inventory: bounce_base
+    - key:
+      - literal: USER
+      value:
+      - special: USER
+    - key:
+      - literal: UID
+      value:
+      - special: UID
+  - context:
+    - literal: ./dockerfiles/layers/tmux
+    args:
+    - key:
+      - literal: USER
+      value:
+      - special: USER
+  - context:
+    - literal: ./dockerfiles/layers/ssh
+    args: []
+  - context:
+    - literal: ./dockerfiles/layers/ssh-keygen
+    args:
+    - key:
+      - literal: USER
+      value:
+      - special: USER
+    - key:
+      - literal: KEY_NAME
+      value:
+      - var: ext_ssh_bridge_key_name
+        #- context:
+        #  - literal: ./dockerfiles/layers/ssh-keygen
+        #  args:
+        #  - key:
+        #    - literal: USER
+        #    value:
+        #    - special: USER
+        #  - key:
+        #    - literal: KEY_NAME
+        #    value:
+        #    - literal: int-ssh-main
+  - context:
+    - literal: ./dockerfiles/starters/sshd
+    args: []
 group:
   commands:
   - register:
@@ -8,11 +60,7 @@ group:
         - image:
             tag:
               compute:
-                directories:
-                - - literal: ./dockerfiles/login
-                - - literal: ./dockerfiles/ssh
-                buildargs:
-                  inventory: bounce_buildargs
+                inventory: bounce_chain
   - if:
       not:
         group:
@@ -51,16 +99,4 @@ group:
               base:
                 inventory: bounce_base
               chain:
-              - context:
-                - literal: ./dockerfiles/login
-                args:
-                  inventory: bounce_buildargs
-              - context:
-                - literal: ./dockerfiles/tmux
-                args:
-                - key:
-                  - literal: USER
-                  value:
-                  - special: USER
-              - context:
-                - literal: ./dockerfiles/ssh
+                inventory: bounce_chain

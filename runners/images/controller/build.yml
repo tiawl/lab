@@ -1,0 +1,56 @@
+group:
+  commands:
+  - register:
+      into:
+        var: controller_tag
+      group:
+        commands:
+        - image:
+            tag:
+              compute:
+                directories:
+                - - literal: ./dockerfiles/layers/login
+                buildargs:
+                  inventory: controller_buildargs
+  - if:
+      not:
+        group:
+          commands:
+          - image:
+              tag:
+                defined:
+                  image:
+                  - key:
+                    - literal: image
+                    var: project
+                  - literal: controller
+                  tag:
+                  - var: controller_tag
+      group:
+        commands:
+        - image:
+            prune:
+            - key:
+              - literal: image
+              var: project
+            - literal: controller
+            - key:
+              - literal: tag
+              special: sep
+            - literal: '*'
+        - image:
+            merge:
+              image:
+              - key:
+                - literal: image
+                var: project
+              - literal: controller
+              tag:
+              - var: controller_tag
+              base:
+                inventory: controller_base
+              chain:
+              - context:
+                - literal: ./dockerfiles/layers/login
+                args:
+                  inventory: controller_buildargs
