@@ -39,20 +39,7 @@ group:
               - source:
                   inventory: int_ssh_main_keys
                 target:
-                - literal: /data/
-                - literal: int
-                - special: sep
-                  key:
-                  - literal: network
-                - literal: ssh
-                - special: sep
-                  key:
-                  - literal: network
-                - literal: main
-                - special: sep
-                  key:
-                  - literal: volume
-                - literal: keys
+                  inventory: int_ssh_main_keys_path
         - container:
             resource:
               copy:

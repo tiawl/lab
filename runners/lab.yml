@@ -51,6 +51,22 @@ inventory:
     key:
     - literal: volume
   - literal: keys
+  int_ssh_main_keys_path:
+  - literal: /data/
+  - special: USER
+  - literal: /int
+  - special: sep
+    key:
+    - literal: network
+  - literal: ssh
+  - special: sep
+    key:
+    - literal: network
+  - literal: main
+  - special: sep
+    key:
+    - literal: volume
+  - literal: keys
 group:
   commands:
   - harden:

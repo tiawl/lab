@@ -36,17 +36,40 @@ inventory:
       - literal: KEY_NAME
       value:
       - var: ext_ssh_bridge_key_name
-        #- context:
-        #  - literal: ./dockerfiles/layers/ssh-keygen
-        #  args:
-        #  - key:
-        #    - literal: USER
-        #    value:
-        #    - special: USER
-        #  - key:
-        #    - literal: KEY_NAME
-        #    value:
-        #    - literal: int-ssh-main
+    - key:
+      - literal: KEY_DIR
+      value:
+      - var: ssh_home
+  - context:
+    - literal: ./dockerfiles/layers/ssh-keygen
+    args:
+    - key:
+      - literal: USER
+      value:
+      - special: USER
+    - key:
+      - literal: KEY_NAME
+      value:
+      - literal: int-ssh-main
+    - key:
+      - literal: KEY_DIR
+      value:
+        inventory: int_ssh_main_keys_path
+  - context:
+    - literal: ./dockerfiles/additional_tasks/bounce
+    args:
+    - key:
+      - literal: USER
+      value:
+      - special: USER
+    - key:
+      - literal: KEY_NAME
+      value:
+      - literal: int-ssh-main
+    - key:
+      - literal: KEY_DIR
+      value:
+        inventory: int_ssh_main_keys_path
   - context:
     - literal: ./dockerfiles/starters/sshd
     args: []
