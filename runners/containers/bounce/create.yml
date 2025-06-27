@@ -91,3 +91,12 @@ group:
                 key:
                 - literal: container
               - literal: bounce
+        - network:
+            connect:
+              network:
+                inventory: int_ssh_main_network_name
+              container:
+              - var: project
+                key:
+                - literal: container
+              - literal: bounce

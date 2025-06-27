@@ -17,3 +17,5 @@ RUN <<END_OF_RUN
         set +f
     fi
 END_OF_RUN
+
+COPY copyme/ /

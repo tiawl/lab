@@ -1,0 +1,22 @@
+group:
+  commands:
+  - if:
+      not:
+        group:
+          commands:
+          - container:
+              status:
+                running:
+                - var: project
+                  key:
+                  - literal: container
+                - literal: controller
+      group:
+        commands:
+        - container:
+            start:
+              name:
+              - var: project
+                key:
+                - literal: container
+              - literal: controller

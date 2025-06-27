@@ -1,3 +1,38 @@
+inventory:
+  controller_chain:
+  - context:
+    - literal: ./dockerfiles/layers/login
+    args:
+    - key:
+      - literal: FROM
+      value:
+        inventory: controller_base
+    - key:
+      - literal: USER
+      value:
+      - special: USER
+    - key:
+      - literal: UID
+      value:
+      - special: UID
+  - context:
+    - literal: ./dockerfiles/additional_tasks/int-ssh-main_network
+    args:
+    - key:
+      - literal: USER
+      value:
+      - special: USER
+    - key:
+      - literal: KEY_NAME
+      value:
+      - literal: int-ssh-main
+    - key:
+      - literal: KEY_DIR
+      value:
+        inventory: int_ssh_main_keys_path
+  - context:
+    - literal: ./dockerfiles/starters/sshd
+    args: []
 group:
   commands:
   - register:
@@ -8,10 +43,7 @@ group:
         - image:
             tag:
               compute:
-                directories:
-                - - literal: ./dockerfiles/layers/login
-                buildargs:
-                  inventory: controller_buildargs
+                inventory: controller_chain
   - if:
       not:
         group:
@@ -50,7 +82,4 @@ group:
               base:
                 inventory: controller_base
               chain:
-              - context:
-                - literal: ./dockerfiles/layers/login
-                args:
-                  inventory: controller_buildargs
+                inventory: controller_chain

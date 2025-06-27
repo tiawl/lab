@@ -1,0 +1,17 @@
+group:
+  commands:
+  - if:
+      not:
+        group:
+          commands:
+          - network:
+              created:
+                name:
+                  inventory: int_ssh_main_network_name
+      group:
+        commands:
+        - network:
+            create:
+              name:
+                inventory: int_ssh_main_network_name
+              isolated: true

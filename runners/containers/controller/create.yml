@@ -1,0 +1,60 @@
+group:
+  commands:
+  - if:
+      not:
+        group:
+          commands:
+          - container:
+              status:
+                created:
+                - var: project
+                  key:
+                  - literal: container
+                - literal: controller
+      group:
+        commands:
+        - register:
+            into:
+              var: controller_theme
+            group:
+              commands:
+              - call:
+                  command: new_instance_theme
+                  args: []
+        - container:
+            create:
+              name:
+              - var: project
+                key:
+                - literal: container
+              - literal: controller
+              image:
+              - var: project
+                key:
+                - literal: image
+              - literal: controller
+              hostname:
+              - literal: controller
+              volumes:
+              - source:
+                  inventory: int_ssh_main_keys
+                target:
+                  inventory: int_ssh_main_keys_path
+        - network:
+            disconnect:
+              network:
+              - literal: bridge
+              container:
+              - var: project
+                key:
+                - literal: container
+              - literal: controller
+        - network:
+            connect:
+              network:
+                inventory: int_ssh_main_network_name
+              container:
+              - var: project
+                key:
+                - literal: container
+              - literal: controller
