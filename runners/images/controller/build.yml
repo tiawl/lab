@@ -16,7 +16,15 @@ inventory:
       value:
       - special: UID
   - context:
-    - literal: ./dockerfiles/additional_tasks/int-ssh-main_network
+    - literal: ./dockerfiles/additional_tasks/int
+    - special: sep
+      key:
+      - literal: network
+    - literal: ssh
+    - special: sep
+      key:
+      - literal: network
+    - literal: main_network
     args:
     - key:
       - literal: USER
@@ -25,7 +33,15 @@ inventory:
     - key:
       - literal: KEY_NAME
       value:
-      - literal: int-ssh-main
+      - literal: int
+      - special: sep
+        key:
+        - literal: network
+      - literal: ssh
+      - special: sep
+        key:
+        - literal: network
+      - literal: main
     - key:
       - literal: KEY_DIR
       value:
