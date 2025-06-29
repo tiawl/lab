@@ -13,14 +13,11 @@ group:
                 - literal: controller
       group:
         commands:
-        - register:
-            into:
-              var: controller_theme
-            group:
-              commands:
-              - call:
-                  command: new_instance_theme
-                  args: []
+        - color:
+            index:
+            - number: 2
+            ref:
+            - literal: controller_theme
         - container:
             create:
               name:

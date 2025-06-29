@@ -87,6 +87,9 @@ group:
   commands:
   - harden:
       command:
+      - literal: ssh
+  - harden:
+      command:
       - literal: ssh-keygen
       as:
       - literal: ssh_keygen
@@ -99,7 +102,6 @@ group:
       scope: local
   - assign:
       vars:
-      - - literal: instance_counter
       - - literal: bounce_theme
       - - literal: controller_theme
       scope: global
@@ -111,34 +113,6 @@ group:
       - - literal: path
       type: associative
       scope: local
-  - define:
-      name: new_instance_theme
-      group:
-        commands:
-        - assign:
-            vars:
-            - - literal: output
-            scope: local
-        - register:
-            into:
-              var: instance_counter
-            arithmetic:
-              addition:
-                left:
-                  var: instance_counter
-                  default:
-                  - number: -1
-                right:
-                  number: 1
-        - color:
-            index:
-            - var: instance_counter
-            ref:
-            - literal: output
-        - print:
-            format: '%s'
-            args:
-            - - var: output
   - mutate:
       name:
         var: loc
@@ -301,16 +275,37 @@ group:
   - container:
       exec:
         name:
+        - var: project
+          key:
+          - literal: container
         - literal: bounce
-        detached: false
+        detached:
+        - literal: "false"
         user:
         - special: USER
         command:
         - - literal: bash
         - - literal: -c
-        - - literal: '"printf \"THEME=%b%d%b\\nexport THEME\\n\" \"\047\" \"'
+        - - literal: 'printf "THEME=%b%d%b\\nexport THEME\\n" "\047" "'
           - var: bounce_theme
-          - literal: '\" \"\047\" >> /home/user/.bash_profile.d/10theme.sh"'
+          - literal: '" "\047" >> /home/user/.bash_profile.d/10theme.sh'
+  - container:
+      exec:
+        name:
+        - var: project
+          key:
+          - literal: container
+        - literal: controller
+        detached:
+        - literal: "false"
+        user:
+        - special: USER
+        command:
+        - - literal: bash
+        - - literal: -c
+        - - literal: 'printf "THEME=%b%d%b\\nexport THEME\\n" "\047" "'
+          - var: controller_theme
+          - literal: '" "\047" >> /home/user/.bash_profile.d/10theme.sh'
   - call:
       command: ssh
       args:
