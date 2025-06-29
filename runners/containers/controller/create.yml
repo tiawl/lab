@@ -7,10 +7,7 @@ group:
           - container:
               status:
                 created:
-                - var: project
-                  key:
-                  - literal: container
-                - literal: controller
+                  inventory: controller_container_name
       group:
         commands:
         - color:
@@ -21,15 +18,9 @@ group:
         - container:
             create:
               name:
-              - var: project
-                key:
-                - literal: container
-              - literal: controller
+                inventory: controller_container_name
               image:
-              - var: project
-                key:
-                - literal: image
-              - literal: controller
+                inventory: controller_image_name
               hostname:
               - literal: controller
               volumes:
@@ -42,16 +33,10 @@ group:
               network:
               - literal: bridge
               container:
-              - var: project
-                key:
-                - literal: container
-              - literal: controller
+                inventory: controller_container_name
         - network:
             connect:
               network:
                 inventory: int_ssh_main_network_name
               container:
-              - var: project
-                key:
-                - literal: container
-              - literal: controller
+                inventory: controller_container_name

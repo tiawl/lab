@@ -7,16 +7,10 @@ group:
           - container:
               status:
                 running:
-                - var: project
-                  key:
-                  - literal: container
-                - literal: bounce
+                  inventory: bounce_container_name
       group:
         commands:
         - container:
             start:
               name:
-              - var: project
-                key:
-                - literal: container
-              - literal: bounce
+                inventory: bounce_container_name

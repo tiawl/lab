@@ -83,6 +83,26 @@ inventory:
     key:
     - literal: network
   - literal: main
+  bounce_image_name:
+  - var: project
+    key:
+    - literal: image
+  - literal: bounce
+  bounce_container_name:
+  - var: project
+    key:
+    - literal: container
+  - literal: bounce
+  controller_image_name:
+  - var: project
+    key:
+    - literal: image
+  - literal: controller
+  controller_container_name:
+  - var: project
+    key:
+    - literal: container
+  - literal: controller
 group:
   commands:
   - harden:
@@ -238,18 +258,12 @@ group:
       container:
         stop:
           name:
-          - var: project
-            key:
-            - literal: container
-          - literal: bounce
+            inventory: bounce_container_name
   - defer:
       container:
         stop:
           name:
-          - var: project
-            key:
-            - literal: container
-          - literal: controller
+            inventory: controller_container_name
   - register:
       group:
         commands:
@@ -257,10 +271,7 @@ group:
             ip:
               get:
                 container:
-                - var: project
-                  key:
-                  - literal: container
-                - literal: bounce
+                  inventory: bounce_container_name
                 network:
                   inventory: ext_ssh_bridge_network_name
       into:
@@ -275,10 +286,7 @@ group:
   - container:
       exec:
         name:
-        - var: project
-          key:
-          - literal: container
-        - literal: bounce
+          inventory: bounce_container_name
         detached:
         - literal: "false"
         user:
@@ -292,10 +300,7 @@ group:
   - container:
       exec:
         name:
-        - var: project
-          key:
-          - literal: container
-        - literal: controller
+          inventory: controller_container_name
         detached:
         - literal: "false"
         user:

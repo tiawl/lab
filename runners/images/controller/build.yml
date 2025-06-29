@@ -68,10 +68,7 @@ group:
               tag:
                 defined:
                   image:
-                  - key:
-                    - literal: image
-                    var: project
-                  - literal: controller
+                    inventory: controller_image_name
                   tag:
                   - var: controller_tag
       group:
@@ -89,10 +86,7 @@ group:
         - image:
             merge:
               image:
-              - key:
-                - literal: image
-                var: project
-              - literal: controller
+                inventory: controller_image_name
               tag:
               - var: controller_tag
               base:
