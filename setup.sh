@@ -178,7 +178,7 @@ setup () (
   #git clone -- 'https://github.com/tiawl/placid' "${tmp}"
   cp -r ../placid/. "${tmp}"
 
-  env --ignore-environment SDIR="${tmp}" BASH_ENV="${tmp}/src/utils.sh" bash --norc --noprofile "${tmp}/compile.sh"
+  env --ignore-environment SDIR="${tmp}" BASH_ENV="${tmp}/src/index.sh" bash --norc --noprofile "${tmp}/compile.sh"
 
   mv "${tmp}/bin/placid" ~/.local/bin/
   rm -rf "${tmp}"
