@@ -1,13 +1,14 @@
 group:
   commands:
   - if:
-      not:
-        group:
-          commands:
-          - container:
-              status:
-                running:
-                  inventory: bounce_container_name
+      conditional:
+        not:
+          group:
+            commands:
+            - container:
+                status:
+                  running:
+                    inventory: bounce_container_name
       group:
         commands:
         - container:

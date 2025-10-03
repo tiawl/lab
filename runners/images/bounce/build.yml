@@ -101,16 +101,17 @@ group:
               compute:
                 inventory: bounce_chain
   - if:
-      not:
-        group:
-          commands:
-          - image:
-              tag:
-                defined:
-                  image:
-                    inventory: bounce_image_name
-                  tag:
-                  - var: bounce_tag
+      conditional:
+        not:
+          group:
+            commands:
+            - image:
+                tag:
+                  defined:
+                    image:
+                      inventory: bounce_image_name
+                    tag:
+                    - var: bounce_tag
       group:
         commands:
         - image:

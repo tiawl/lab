@@ -61,16 +61,17 @@ group:
               compute:
                 inventory: controller_chain
   - if:
-      not:
-        group:
-          commands:
-          - image:
-              tag:
-                defined:
-                  image:
-                    inventory: controller_image_name
-                  tag:
-                  - var: controller_tag
+      conditional:
+        not:
+          group:
+            commands:
+            - image:
+                tag:
+                  defined:
+                    image:
+                      inventory: controller_image_name
+                    tag:
+                    - var: controller_tag
       group:
         commands:
         - image:

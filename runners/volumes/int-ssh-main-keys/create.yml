@@ -1,13 +1,14 @@
 group:
   commands:
   - if:
-      not:
-        group:
-          commands:
-          - volume:
-              created:
-                name:
-                  inventory: int_ssh_main_keys
+      conditional:
+        not:
+          group:
+            commands:
+            - volume:
+                created:
+                  name:
+                    inventory: int_ssh_main_keys
       group:
         commands:
         - volume:

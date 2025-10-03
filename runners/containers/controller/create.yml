@@ -1,13 +1,14 @@
 group:
   commands:
   - if:
-      not:
-        group:
-          commands:
-          - container:
-              status:
-                created:
-                  inventory: controller_container_name
+      conditional:
+        not:
+          group:
+            commands:
+            - container:
+                status:
+                  created:
+                    inventory: controller_container_name
       group:
         commands:
         - color:

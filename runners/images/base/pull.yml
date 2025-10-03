@@ -1,21 +1,22 @@
 group:
   commands:
   - if:
-      not:
-        group:
-          commands:
-          - image:
-              tag:
-                defined:
-                  image:
-                  - key:
-                    - literal: image
-                    var: loc
-                  - literal: alpine
-                  tag:
-                  - key:
+      conditional:
+        not:
+          group:
+            commands:
+            - image:
+                tag:
+                  defined:
+                    image:
+                    - key:
+                      - literal: image
+                      var: loc
                     - literal: alpine
-                    var: version
+                    tag:
+                    - key:
+                      - literal: alpine
+                      var: version
       group:
         commands:
         - image:
