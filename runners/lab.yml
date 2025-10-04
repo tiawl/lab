@@ -277,7 +277,8 @@ group:
   - readonly:
     - - literal: bounce_ip
   - call:
-      command: ssh-keygen
+      command:
+      - literal: ssh-keygen
       args:
       - - literal: -R
       - - var: bounce_ip
@@ -310,7 +311,8 @@ group:
           - var: controller_theme
           - literal: '" "\047" >> /home/user/.bash_profile.d/10theme.sh'
   - call:
-      command: ssh
+      command:
+      - literal: ssh
       args:
       - - literal: -i
       - - var: path
