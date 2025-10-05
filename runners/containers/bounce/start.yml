@@ -9,9 +9,10 @@ group:
                 status:
                   running:
                     inventory: bounce_container_name
-      group:
-        commands:
-        - container:
-            start:
-              name:
-                inventory: bounce_container_name
+      then:
+        group:
+          commands:
+          - container:
+              start:
+                name:
+                  inventory: bounce_container_name

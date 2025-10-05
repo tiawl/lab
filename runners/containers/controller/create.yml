@@ -9,35 +9,36 @@ group:
                 status:
                   created:
                     inventory: controller_container_name
-      group:
-        commands:
-        - color:
-            index:
-            - number: 2
-            ref:
-            - literal: controller_theme
-        - container:
-            create:
-              name:
-                inventory: controller_container_name
-              image:
-                inventory: controller_image_name
-              hostname:
-              - literal: controller
-              volumes:
-              - source:
-                  inventory: int_ssh_main_keys
-                target:
-                  inventory: int_ssh_main_keys_path
-        - network:
-            disconnect:
-              network:
-              - literal: bridge
-              container:
-                inventory: controller_container_name
-        - network:
-            connect:
-              network:
-                inventory: int_ssh_main_network_name
-              container:
-                inventory: controller_container_name
+      then:
+        group:
+          commands:
+          - color:
+              index:
+              - number: 2
+              ref:
+              - literal: controller_theme
+          - container:
+              create:
+                name:
+                  inventory: controller_container_name
+                image:
+                  inventory: controller_image_name
+                hostname:
+                - literal: controller
+                volumes:
+                - source:
+                    inventory: int_ssh_main_keys
+                  target:
+                    inventory: int_ssh_main_keys_path
+          - network:
+              disconnect:
+                network:
+                - literal: bridge
+                container:
+                  inventory: controller_container_name
+          - network:
+              connect:
+                network:
+                  inventory: int_ssh_main_network_name
+                container:
+                  inventory: controller_container_name

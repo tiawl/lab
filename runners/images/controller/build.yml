@@ -72,25 +72,26 @@ group:
                       inventory: controller_image_name
                     tag:
                     - var: controller_tag
-      group:
-        commands:
-        - image:
-            prune:
-            - key:
-              - literal: image
-              var: project
-            - literal: controller
-            - key:
-              - literal: tag
-              special: sep
-            - literal: '*'
-        - image:
-            merge:
-              image:
-                inventory: controller_image_name
-              tag:
-              - var: controller_tag
-              base:
-                inventory: controller_base
-              chain:
-                inventory: controller_chain
+      then:
+        group:
+          commands:
+          - image:
+              prune:
+              - key:
+                - literal: image
+                var: project
+              - literal: controller
+              - key:
+                - literal: tag
+                special: sep
+              - literal: '*'
+          - image:
+              merge:
+                image:
+                  inventory: controller_image_name
+                tag:
+                - var: controller_tag
+                base:
+                  inventory: controller_base
+                chain:
+                  inventory: controller_chain

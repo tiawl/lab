@@ -112,25 +112,26 @@ group:
                       inventory: bounce_image_name
                     tag:
                     - var: bounce_tag
-      group:
-        commands:
-        - image:
-            prune:
-            - key:
-              - literal: image
-              var: project
-            - literal: bounce
-            - key:
-              - literal: tag
-              special: sep
-            - literal: '*'
-        - image:
-            merge:
-              image:
-                inventory: bounce_image_name
-              tag:
-              - var: bounce_tag
-              base:
-                inventory: bounce_base
-              chain:
-                inventory: bounce_chain
+      then:
+        group:
+          commands:
+          - image:
+              prune:
+              - key:
+                - literal: image
+                var: project
+              - literal: bounce
+              - key:
+                - literal: tag
+                special: sep
+              - literal: '*'
+          - image:
+              merge:
+                image:
+                  inventory: bounce_image_name
+                tag:
+                - var: bounce_tag
+                base:
+                  inventory: bounce_base
+                chain:
+                  inventory: bounce_chain

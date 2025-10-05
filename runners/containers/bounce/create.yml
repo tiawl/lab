@@ -9,68 +9,69 @@ group:
                 status:
                   created:
                     inventory: bounce_container_name
-      group:
-        commands:
-        - color:
-            index:
-            - number: 1
-            ref:
-            - literal: bounce_theme
-        - container:
-            create:
-              name:
-                inventory: bounce_container_name
-              image:
-                inventory: bounce_image_name
-              hostname:
-              - literal: bounce
-              volumes:
-              - source:
-                  inventory: int_ssh_main_keys
-                target:
-                  inventory: int_ssh_main_keys_path
-        - container:
-            resource:
-              copy:
+      then:
+        group:
+          commands:
+          - color:
+              index:
+              - number: 1
+              ref:
+              - literal: bounce_theme
+          - container:
+              create:
                 name:
                   inventory: bounce_container_name
-                src:
-                - var: path
-                  key:
-                  - literal: bounce_ssh_key
-                dest:
-                - var: path
-                  key:
-                  - literal: ssh_home
-        - container:
-            resource:
-              copy:
-                name:
+                image:
+                  inventory: bounce_image_name
+                hostname:
+                - literal: bounce
+                volumes:
+                - source:
+                    inventory: int_ssh_main_keys
+                  target:
+                    inventory: int_ssh_main_keys_path
+          - container:
+              resource:
+                copy:
+                  name:
+                    inventory: bounce_container_name
+                  src:
+                  - var: path
+                    key:
+                    - literal: bounce_ssh_key
+                  dest:
+                  - var: path
+                    key:
+                    - literal: ssh_home
+          - container:
+              resource:
+                copy:
+                  name:
+                    inventory: bounce_container_name
+                  src:
+                  - var: path
+                    key:
+                    - literal: bounce_ssh_key
+                  - literal: .pub
+                  dest:
+                  - var: path
+                    key:
+                    - literal: ssh_home
+          - network:
+              disconnect:
+                network:
+                - literal: bridge
+                container:
                   inventory: bounce_container_name
-                src:
-                - var: path
-                  key:
-                  - literal: bounce_ssh_key
-                - literal: .pub
-                dest:
-                - var: path
-                  key:
-                  - literal: ssh_home
-        - network:
-            disconnect:
-              network:
-              - literal: bridge
-              container:
-                inventory: bounce_container_name
-        - network:
-            connect:
-              network:
-                inventory: ext_ssh_bridge_network_name
-              container:
-                inventory: bounce_container_name
-        - network:
-            connect:
-              network:
-                inventory: int_ssh_main_network_name
-              container:
-                inventory: bounce_container_name
+          - network:
+              connect:
+                network:
+                  inventory: ext_ssh_bridge_network_name
+                container:
+                  inventory: bounce_container_name
+          - network:
+              connect:
+                network:
+                  inventory: int_ssh_main_network_name
+                container:
+                  inventory: bounce_container_name

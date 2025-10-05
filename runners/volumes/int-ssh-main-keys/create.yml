@@ -9,9 +9,10 @@ group:
                 created:
                   name:
                     inventory: int_ssh_main_keys
-      group:
-        commands:
-        - volume:
-            create:
-              name:
-                inventory: int_ssh_main_keys
+      then:
+        group:
+          commands:
+          - volume:
+              create:
+                name:
+                  inventory: int_ssh_main_keys

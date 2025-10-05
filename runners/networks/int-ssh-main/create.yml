@@ -9,10 +9,11 @@ group:
                 created:
                   name:
                     inventory: int_ssh_main_network_name
-      group:
-        commands:
-        - network:
-            create:
-              name:
-                inventory: int_ssh_main_network_name
-              isolated: true
+      then:
+        group:
+          commands:
+          - network:
+              create:
+                name:
+                  inventory: int_ssh_main_network_name
+                isolated: true

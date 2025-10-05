@@ -9,10 +9,11 @@ group:
                 created:
                   name:
                     inventory: ext_ssh_bridge_network_name
-      group:
-        commands:
-        - network:
-            create:
-              name:
-                inventory: ext_ssh_bridge_network_name
-              isolated: true
+      then:
+        group:
+          commands:
+          - network:
+              create:
+                name:
+                  inventory: ext_ssh_bridge_network_name
+                isolated: true

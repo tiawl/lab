@@ -9,9 +9,10 @@ group:
                 status:
                   running:
                     inventory: controller_container_name
-      group:
-        commands:
-        - container:
-            start:
-              name:
-                inventory: controller_container_name
+      then:
+        group:
+          commands:
+          - container:
+              start:
+                name:
+                  inventory: controller_container_name
