@@ -25,7 +25,7 @@ reset () {
   docker image prune --all -f
   docker buildx prune -f
   ./setup.sh
-  placid runner exec ./runners/lab.yml
+  placid routine exec ./routines/lab.yml
 }
 
 reset "${@}"

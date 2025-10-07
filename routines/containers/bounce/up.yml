@@ -3,9 +3,9 @@ import:
 - start.yml
 group:
   commands:
-  - runner:
+  - routine:
       exec:
         imported: create.yml
-  - runner:
+  - routine:
       exec:
         imported: start.yml

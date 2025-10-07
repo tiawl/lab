@@ -147,7 +147,7 @@ group:
       key:
       - literal: container
       value:
-      - - special: RUNNER
+      - - special: ROUTINE
         - key:
           - literal: container
           special: sep
@@ -157,7 +157,7 @@ group:
       key:
       - literal: image
       value:
-      - - special: RUNNER
+      - - special: ROUTINE
         - key:
           - literal: image
           special: sep
@@ -167,7 +167,7 @@ group:
       key:
       - literal: network
       value:
-      - - special: RUNNER
+      - - special: ROUTINE
         - key:
           - literal: network
           special: sep
@@ -177,7 +177,7 @@ group:
       key:
       - literal: volume
       value:
-      - - special: RUNNER
+      - - special: ROUTINE
         - key:
           - literal: volume
           special: sep
@@ -191,7 +191,7 @@ group:
   - readonly:
     - - literal: loc
     - - literal: project
-  - runner:
+  - routine:
       exec:
         imported: images/base/pull.yml
   - mutate:
@@ -209,10 +209,10 @@ group:
   - readonly:
     - - literal: ssh_home
     - - literal: ext_ssh_bridge_key_name
-  - runner:
+  - routine:
       exec:
         imported: images/bounce/build.yml
-  - runner:
+  - routine:
       exec:
         imported: images/controller/build.yml
   - mutate:
@@ -233,19 +233,19 @@ group:
       - - var: ssh_home
   - readonly:
     - - literal: path
-  - runner:
+  - routine:
       exec:
         imported: networks/ext-ssh-bridge/create.yml
-  - runner:
+  - routine:
       exec:
         imported: networks/int-ssh-main/create.yml
-  - runner:
+  - routine:
       exec:
         imported: volumes/int-ssh-main-keys/create.yml
-  - runner:
+  - routine:
       exec:
         imported: containers/bounce/up.yml
-  - runner:
+  - routine:
       exec:
         imported: containers/controller/up.yml
   - defer:
